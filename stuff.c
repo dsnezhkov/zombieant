@@ -49,13 +49,16 @@ intact values in:
 
 /* We have to grab and save argv/argc pointers globally
 	so they are visible for update
+	Provision for shim commands
 */
 
-char ** largv;
-int largc;
-char** lenvp;
+char ** largv = NULL;
+int     largc;
+char ** lenvp = NULL;
+char ** commands = NULL;
+char ** noncommands = NULL;
 
-// structure for message queue 
+// structure and indetifiers for message queue 
 struct mesg_buffer {
 	 long mesg_type;
 	 char mesg_text[MAX_MESG];
@@ -165,19 +168,23 @@ void cleanEnv(void){
 	 unsetenv("LD_PRELOAD"); 
 }
 
+// Used to accept argv arguments that may be interpreted as commands.
 void checkCommands(void){
 
-	char **commands = NULL;
 	int  c = 0;
+	int  n = 0;
 	
 	if (1 < largc) {
     for (int i=0; i<largc; i++) {
 
+#ifdef PSDEBUG
 		 printf("analysing arg: %s\n", largv[i]);
-
+#endif
 	    int last_pos = strlen(largv[i])-1;
-		 printf("\targ last pos: %d\n", last_pos);
+	    int command_len = strlen(largv[i]);
 
+			//&& 0 <= last_pos
+		 printf("\targ last pos: %d\n", last_pos);
 		 printf("\targ value first pos: %c\n", largv[i][0]);
 
 
@@ -189,26 +196,62 @@ void checkCommands(void){
 		 	if( NULL == commands) {
             fprintf(stderr, "Error: Failed to allocate enough memory!\n");
        	}else{
-		 		commands[c] = strdup(largv[i]);
+
+
+		 		printf("command_len: %d\n", command_len);
+				if (command_len >= 2) { 
+
+					//remove '@'s,
+					memmove(largv[i], largv[i]+1, command_len -2 );
+					largv[i][command_len - 2] = '\0';
+		 			commands[c] = strdup(largv[i]);
+				}	
+				/* 
+					Optional: NOP out commands from argv. 
+				   WARNING: callee sill receives empty placeholders for argvs we deleted. 
+
+					TODO: I was not able to replace argv with noncommands due to realloc() 
+							not guaranteeing in place buffer reallocation
+				*/
+
+     			memset(largv[i], 0, strlen(largv[i]));
 		 		++c;
-				//&& 0 <= last_pos && '@' == *largv[last_pos] )
 		 	}
+
+		 // Record only non-commands: real argv
+		 }else{
+		 	noncommands = (char **)realloc(noncommands, (sizeof(char*) * (n+1)) );
+		 	if( NULL == noncommands) {
+            fprintf(stderr, "Error: Failed to allocate enough memory!\n");
+       	}else{
+		 		noncommands[n] = strdup(largv[i]);
+		 		++n;
+		   }
+			
 		 }
-    }
+     }
 	}
 
-   for( int i = 0; i < c; ++i) {
-        printf("\t%d) \"%s\"\n", i, commands[i]);
-    }
-   printf("Number of tokens: %d\n", c);
+	if (n > 0){
+   	printf("Non-Command args: \n");
+		for( int i = 0; i < n; ++i) {
+			  printf("\t%d) \"%s\"\n", i, noncommands[i]);
+		}
+	}
+
+	if (c > 0){
+   	printf("Command args: \n");
+		for( int i = 0; i < c; ++i) {
+			  printf("\t%d) \"%s\"\n", i, commands[i]);
+		}
+	}
 }
+
 // Constructor called by ld.so before the main. This is not guaranteed but works.
 __attribute__((constructor)) static void myctor(int argc, char **argv, char** envp)
 {
 
-
-
-	 // Save pointers to argv/argc
+	 // Save pointers to argv/argc/envp
 	 largv=argv;
 	 largc=argc;
 	 lenvp=envp;
