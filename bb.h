@@ -1,14 +1,6 @@
 #include<stdlib.h>
 
-void setNewName(int argc, char *argv[], char* procname);
-
-
-// structure for message queue 
-struct mesg_buffer { 
-    long mesg_type; 
-    char mesg_text[100]; 
-} message; 
-
+int setNewName(void);
 
 
 #ifndef BB_WAIT
@@ -17,5 +9,5 @@ struct mesg_buffer {
 
 #ifndef BB_DEBUG
 #define BB_DEBUG 
-#endif 
+#endif
 
