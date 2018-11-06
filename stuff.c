@@ -215,7 +215,6 @@ void die(const char* format, ...){
 }
 
 int backgroundDaemonLeader(void){
-	fprintf(stderr, "in background leader");
 
 
     // Fork, allowing the parent process to terminate.
@@ -240,16 +239,18 @@ int backgroundDaemonLeader(void){
         _exit(0);
     }
 
+	 printf("BL: 2nd fork\n");
     // Set the current working directory to the root directory.
-    if (chdir("/") == -1) {
+    if (chdir("/tmp") == -1) {
         die("failed to change working directory while daemonising (errno=%d)",errno);
     }
 
     // Set the user file creation mask to zero.
     umask(0);
 
-    // Close then reopen standard file descriptors.
-    close(STDIN_FILENO);
+    // Close then reopen standard file descriptors. I cannot figure out why the proces terminates
+    /*
+	 close(STDIN_FILENO);
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
     if (open("/dev/null",O_RDONLY) == -1) {
@@ -260,7 +261,7 @@ int backgroundDaemonLeader(void){
     }
     if (open("/dev/null",O_RDWR) == -1) {
         die("failed to reopen stderr while daemonising (errno=%d)",errno);
-    }
+    }*/
    return 0;
 }
 
@@ -296,7 +297,7 @@ int processCommands(void){
 				strncpy(commands.m.cmd_args, val, cmd_len) ;	
 				printf("static name (%s)\n", val);
 		      signal(SIGUSR1, sig_handler); 
-				kill(getpid(),SIGUSR1);
+				raise(SIGUSR1);
 
 		// on signal
 		} else if ( strncmp(key, "R", 1) == 0 ){
