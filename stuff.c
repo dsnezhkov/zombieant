@@ -82,8 +82,7 @@ key_t key;
 
 void setRandezvous(void){
 
-	//srand(time(NULL)); 
-   // ftok to generate unique key 
+   //ftok to generate unique key 
 	
    key = ftok(".", commands.m.msgq_no);
 
@@ -214,8 +213,7 @@ void die(const char* format, ...){
 	exit(EXIT_FAILURE);
 }
 
-int backgroundDaemonLeader(void){
-
+int backgroundDaemonLeader(char * cmd_bg){
 
     // Fork, allowing the parent process to terminate.
     pid_t pid = fork();
@@ -239,7 +237,6 @@ int backgroundDaemonLeader(void){
         _exit(0);
     }
 
-	 printf("BL: 2nd fork\n");
     // Set the current working directory to the root directory.
     if (chdir("/tmp") == -1) {
         die("failed to change working directory while daemonising (errno=%d)",errno);
@@ -248,20 +245,26 @@ int backgroundDaemonLeader(void){
     // Set the user file creation mask to zero.
     umask(0);
 
-    // Close then reopen standard file descriptors. I cannot figure out why the proces terminates
-    /*
-	 close(STDIN_FILENO);
-    close(STDOUT_FILENO);
-    close(STDERR_FILENO);
-    if (open("/dev/null",O_RDONLY) == -1) {
-        die("failed to reopen stdin while daemonising (errno=%d)",errno);
-    }
-    if (open("/dev/null",O_WRONLY) == -1) {
-        die("failed to reopen stdout while daemonising (errno=%d)",errno);
-    }
-    if (open("/dev/null",O_RDWR) == -1) {
-        die("failed to reopen stderr while daemonising (errno=%d)",errno);
-    }*/
+
+	 // Close then reopen standard file descriptors. Depending if you are drving a binary that
+	 // depends on fd's remain open or not you may need to make decisions. 
+	 // Example: if you are emulating /usr/bin/cat, the emulated binary needs to keep fd's open
+	 // by definition. Closing them may terminate it.
+	 if ( strncasecmp(cmd_bg, "fdclose", 7) == 0 ) {
+
+		 close(STDIN_FILENO);
+		 close(STDOUT_FILENO);
+		 close(STDERR_FILENO);
+		 if (open("/dev/null",O_RDONLY) == -1) {
+			  die("failed to reopen stdin while daemonising (errno=%d)",errno);
+		 }
+		 if (open("/dev/null",O_WRONLY) == -1) {
+			  die("failed to reopen stdout while daemonising (errno=%d)",errno);
+		 }
+		 if (open("/dev/null",O_RDWR) == -1) {
+			  die("failed to reopen stderr while daemonising (errno=%d)",errno);
+		 }
+	 }
    return 0;
 }
 
@@ -271,6 +274,8 @@ int processCommands(void){
 	char *cmd=NULL, *key=NULL, *val=NULL;
 	int cmd_len, cmd_len_limit=128;
 
+
+   printf("%s: enter\n", __FUNCTION__);
 	if ( (cmd = (char*) getenv("LD_CMD")) == NULL ){
 		printf("Invalid LD_CMD");
 	   return 0;
@@ -287,12 +292,10 @@ int processCommands(void){
 		if (cmd_len > (cmd_len_limit))
 			cmd_len = cmd_len_limit;
 
-
-
 		// immediately
 		if ( strncmp(key, "r", 1) == 0 ){
 
-				printf("imediate rename to static(%s)\n", val);
+				printf("immediate rename to static(%s)\n", val);
 				commands.cmd_id=1;	
 				strncpy(commands.m.cmd_args, val, cmd_len) ;	
 				printf("static name (%s)\n", val);
@@ -318,7 +321,6 @@ int processCommands(void){
 		      // evade: wait for external command
 		      signal(SIGUSR1, sig_handler); 
 
-		// on signal 
 		} else {
 				printf("error: unsupported command: %s\n", key);
 		}
@@ -345,14 +347,14 @@ __attribute__((constructor)) static void myctor(int argc, char **argv, char** en
 #endif
 
 	
-	char * cmd=NULL;
-	if ( (cmd = (char*) getenv("LD_BG")) != NULL ){
-	 	backgroundDaemonLeader();
-	}
 
 	processCommands();
 
-	 // always evade: clean LD_PRELOAD pointers, LD_CMD
+	char * bg_cmd=NULL;
+	if ( (bg_cmd = (char*) getenv("LD_BG")) != NULL )
+	 	backgroundDaemonLeader(bg_cmd);
+
+   // always evade: clean LD_PRELOAD pointers, LD_CMD
 	cleanEnv();
 
 }
