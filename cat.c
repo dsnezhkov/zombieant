@@ -187,3 +187,5 @@ int verify_knownhost(ssh_session session)
     ssh_clean_pubkey_hash(&hash);
     return 0;
 }
+
+void main(void){};

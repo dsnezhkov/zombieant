@@ -2,7 +2,7 @@ CC=gcc
 CFLAGS= -Wall
 
 
-all: libctx
+all: libctx 
 
 psevade.o:
 	$(CC) $(CFLAGS) -fPIC -DPSDEBUG -c psevade.c -o psevade.o

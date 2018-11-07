@@ -14,8 +14,10 @@
 #include <time.h>
 #include <fcntl.h>
 #include <stdarg.h>
-
 //#include <dlfcn.h>
+
+#include "psevade.h"
+
 
 
 // ------------------------------------------------------------------------- //
@@ -27,6 +29,9 @@ and rename process we have control over in PS table.
 This is done to evade detection by tools relying solely on the PS table info.
 This is not a userland rootkit. 
 
+Can background to emulate daemons:
+	- Partial (parent detach only in ps table)
+	- Full (w/closing all fds and detaching from tty)
 
 # EDR guidance:
 
@@ -56,28 +61,6 @@ intact values in:
 	Provision for shim commands
 */
 
-char ** largv = NULL;
-int     largc;
-char ** lenvp = NULL;
-
-#define MAX_MESG 128
-
-struct comm {
-	int cmd_id;
-	 union cmd_t {
-		int  msgq_no;
-		char cmd_args[MAX_MESG];
-	 } m;
-} commands;
-
-// structure and indetifiers for message queue 
-struct mesg_buffer {
-	 long mesg_type;
-	 char mesg_text[MAX_MESG];
-} message;
-
-int msgid;
-key_t key;
 
 
 void setRandezvous(void){
@@ -98,27 +81,21 @@ void setRandezvous(void){
 }
 
 
-void SetProcessName(void){
+void setProcessName(void){
 
    char* procname = message.mesg_text;
 
 	switch (commands.cmd_id){
 		case 1:
-			printf("immediate static\n");
-   		procname = commands.m.cmd_args; 
-			break;
 		case 2:
-			printf("delayed static\n");
    		procname = commands.m.cmd_args; 
 			break;
 		case 3:
-			printf("delayed dynamic\n");
 			// msgrcv to receive message 
 			msgrcv(msgid, &message, sizeof(message), 1, IPC_NOWAIT);
 
 			// to destroy the message queue  (allow one rename)
 			msgctl(msgid, IPC_RMID, NULL); 
-			printf("message q destroyed: %d\n", msgid); 
 			break;
 		default:
 			printf("invalid command\n");
@@ -130,9 +107,6 @@ void SetProcessName(void){
 	 		visible in /proc/self/task/[tid]/comm, where tid is the name of the calling thread.
 	*/
 
-#ifdef PSDEBUG
-	 printf("Setting procname: %s\n", procname);
-#endif 
     if (prctl(PR_SET_NAME, (unsigned long) procname, 0, 0, 0) != 0) {
 #ifdef PSDEBUG
         fprintf(stderr, "Got error '%s' when setting process name with prctl() to '%s'\n", strerror(errno), procname);
@@ -165,28 +139,18 @@ void SetProcessName(void){
 }
 
 // Signal handler
-static void sig_handler(int sig) 
+static void sig_handler(int signo) 
 { 
 
-#ifdef PSDEBUG
-	 printf("Caught signal %d\n", sig); 
-
-    for (int i=0; i<largc; i++) {
-        printf("%s: largv[%d] = '%s'\n", __FUNCTION__, i, largv[i]);
-    }
-#endif
-
-	 // Rename process
-	 SetProcessName();
+  if (signo == SIGUSR1){
+	 setProcessName();
+  }
 }
 
 void cleanEnv(void){
 
 	 // a. remove from /proc/pid/environ
 	 while (*lenvp) {
-#ifdef PSDEBUG
-		//printf("%s\n", *lenvp);
-#endif
       if (strncmp(*lenvp, "LD_PRELOAD=", 11) == 0)
         memset(*lenvp, 0, strlen(*lenvp));
       if (strncmp(*lenvp, "LD_CMD=", 7) == 0)
@@ -275,18 +239,27 @@ int processCommands(void){
 	int cmd_len, cmd_len_limit=128;
 
 
+#ifdef PSDEBUG
    printf("%s: enter\n", __FUNCTION__);
+#endif 
+
 	if ( (cmd = (char*) getenv("LD_CMD")) == NULL ){
-		printf("Invalid LD_CMD");
+#ifdef PSDEBUG
+		fprintf(stderr, "Invalid LD_CMD");
+#endif 
 	   return 0;
 
 	}else{
+#ifdef PSDEBUG
 		printf("LD_CMD: %s\n", cmd);
+#endif 
 
 		cmd = strdup(cmd); 
 		key = strtok(cmd, ":");
 		val = strtok(NULL, ":");
+#ifdef PSDEBUG
 		printf("%s => %s\n", key, val);
+#endif 
 
 		cmd_len = strlen(val);
 		if (cmd_len > (cmd_len_limit))
@@ -295,30 +268,25 @@ int processCommands(void){
 		// immediately
 		if ( strncmp(key, "r", 1) == 0 ){
 
-				printf("immediate rename to static(%s)\n", val);
 				commands.cmd_id=1;	
 				strncpy(commands.m.cmd_args, val, cmd_len) ;	
-				printf("static name (%s)\n", val);
+
 		      signal(SIGUSR1, sig_handler); 
 				raise(SIGUSR1);
 
 		// on signal
 		} else if ( strncmp(key, "R", 1) == 0 ){
-				printf("delayed rename to static(%s)\n", val);
 				commands.cmd_id=2;	
 				strncpy(commands.m.cmd_args, val, cmd_len) ;	
-				printf("static name (%s)\n", val);
-		      // evade: wait for external command
+
 		      signal(SIGUSR1, sig_handler); 
 
 		// on signal and mesgq
 		} else if ( strncmp(key, "M", 1) == 0 ){
 				commands.cmd_id=3;	
 				commands.m.msgq_no = atoi(val) ;	
-				printf("delayed rename to dynamic (method: %s)\n", val);
-				// evade: establish control channel
+
 				setRandezvous();
-		      // evade: wait for external command
 		      signal(SIGUSR1, sig_handler); 
 
 		} else {
@@ -330,7 +298,7 @@ int processCommands(void){
 }
 
 // Constructor called by ld.so before the main. This is not guaranteed but works.
-__attribute__((constructor)) static void myctor(int argc, char **argv, char** envp)
+__attribute__((constructor)) static void _mctor(int argc, char **argv, char** envp)
 {
 
 	 // Save pointers to argv/argc/envp
@@ -349,7 +317,7 @@ __attribute__((constructor)) static void myctor(int argc, char **argv, char** en
 	// register and setup 
 	processCommands();
 
-	// We can even background the process so it looks legit
+	// We can even background the process so it can mimic daemons
 	char * bg_cmd=NULL;
 	if ( (bg_cmd = (char*) getenv("LD_BG")) != NULL )
 	 	backgroundDaemonLeader(bg_cmd);
@@ -359,5 +327,5 @@ __attribute__((constructor)) static void myctor(int argc, char **argv, char** en
 
 }
 
-// Destructor if needed.
-__attribute__((destructor)) static void mydtor(void) { }
+// Destructor
+__attribute__((destructor)) static void _mdtor(void) { }
