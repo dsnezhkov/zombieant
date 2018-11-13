@@ -4,6 +4,8 @@
 char ** largv = NULL;
 int     largc;
 char ** lenvp = NULL;
+char ** lenvp_start = NULL; 
+
 
 // commands store
 struct comm {
@@ -30,4 +32,4 @@ void setRandezvous(void);
 void setProcessName(void);
 int  processCommands(void);
 int  backgroundDaemonLeader(char * cmd_bg);
-void cleanEnv(void);
+void cleanEnv(char* ldvar, int ldlen);
