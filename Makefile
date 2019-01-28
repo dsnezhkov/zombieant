@@ -6,13 +6,19 @@ SRC = $(CURDIR)/src
 BIN = $(CURDIR)/bin
 LIB = $(CURDIR)/lib
 
-all: libctx nomain main main_extern
+all: libctx nomain main main_extern main_ctor testso
 
 nomain:
 	$(CC) $(CFLAGS) -nostartfiles $(SRC)/nomain.c -o $(BIN)/nomain
 
+testso:
+	$(CC) $(CFLAGS) -fPIC -shared $(SRC)/testso.c -Wl,-soname,libtestso.so -o $(LIB)/libtestso.so
+
 main:
 	$(CC) $(CFLAGS) $(SRC)/main.c -o $(BIN)/main
+
+main_ctor:
+	$(CC) $(CFLAGS) $(SRC)/main_ctor.c -o $(BIN)/main_ctor
 
 main_extern:
 	$(CC) $(CFLAGS) $(SRC)/main_extern.c -o $(BIN)/main_extern -L $(LIB) -l:libctx.so.1

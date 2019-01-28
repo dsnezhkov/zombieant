@@ -7,7 +7,7 @@ extern void die(const char*, ...);
 
 int main(int argc, char **argv) {
 
-	 int c=0;
+	int c=0;
     while (1) { 
 			printf("trying : %d\n", c);
 			if (c == 5){
@@ -15,6 +15,6 @@ int main(int argc, char **argv) {
 			}
 			c++;
 			sleep(1) ; 
-	 }
+	}
     return 0;
 }
