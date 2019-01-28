@@ -6,7 +6,7 @@ SRC = $(CURDIR)/src
 BIN = $(CURDIR)/bin
 LIB = $(CURDIR)/lib
 
-all: libctx nomain main main_extern main_ctor testso
+all: libctx nomain main main_extern main_ctor main_init  testso
 
 nomain:
 	$(CC) $(CFLAGS) -nostartfiles $(SRC)/nomain.c -o $(BIN)/nomain
@@ -19,6 +19,12 @@ main:
 
 main_ctor:
 	$(CC) $(CFLAGS) $(SRC)/main_ctor.c -o $(BIN)/main_ctor
+
+main_init:
+	$(CC) $(CFLAGS) $(SRC)/main_init.c -o $(BIN)/main_init
+
+main_init_protect:
+	$(CC) $(CFLAGS) -DLD_PROTECT $(SRC)/main_init.c -o $(BIN)/main_init
 
 main_extern:
 	$(CC) $(CFLAGS) $(SRC)/main_extern.c -o $(BIN)/main_extern -L $(LIB) -l:libctx.so.1
@@ -36,6 +42,9 @@ clean_psevade:
 	$(RM) $(LIB)/psevade.o $(LIB)/libctx.so.1
 
 clean_main:
-	$(RM) $(BIN)/main $(BIN)/main_extern $(BIN)/nomain
+	$(RM) $(BIN)/main $(BIN)/main_extern $(BIN)/main_ctor $(BIN)/main_init $(BIN)/nomain
 
-clean: clean_psevade clean_main
+clean_testso:
+	$(RM) $(LIB)/libtestso.so
+
+clean: clean_psevade clean_main clean_testso

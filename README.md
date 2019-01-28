@@ -22,4 +22,7 @@
 `make clean && make all && LD_PRELOAD=./libctx.so.1.0 wc -l /dev/urandom  @M:shm@`
 
 `https://www.cprogramming.com/tutorial/shared-libraries-linux-gcc.html`
+`https://stackoverflow.com/questions/32700494/executing-init-and-fini`
 
+refer:
+`https://haxelion.eu/article/LD_NOT_PRELOADED_FOR_REAL/`
