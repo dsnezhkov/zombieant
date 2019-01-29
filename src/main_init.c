@@ -1,10 +1,10 @@
 #include <stdio.h>
-
-#ifdef LD_PROTECT
-
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+
+#ifdef LD_PROTECT
+
 
 #define BUFFER_SIZE 256
 
