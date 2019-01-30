@@ -26,7 +26,7 @@ weakrefso:
 	$(CC) $(CFLAGS) -fPIC -shared $(SRC)/weakrefso2.c -o $(LIB)/weakrefso2.so
 
 main_weakref:
-	$(CC) $(CFLAGS) -fPIC  $(SRC)/main_weakref.c -o $(BIN)/main_weakref.so
+	$(CC) $(CFLAGS) -fPIC  $(SRC)/main_weakref.c -o $(BIN)/main_weakref
 
 main:
 	$(CC) $(CFLAGS) $(SRC)/main.c -o $(BIN)/main

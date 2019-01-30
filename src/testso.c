@@ -13,7 +13,7 @@ void before_main(void)
 }
 
 //delayed invocation
-static void after_main(void) __attribute__((destructor (65535)));
+static void after_main(void) __attribute__((destructor (101)));
 static void after_main(void)
 {
 
