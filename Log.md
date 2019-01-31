@@ -35,6 +35,33 @@ What is you can be agnostic to the application you are tryint to control
 
 `LD_PRELOAD=lib/weakrefso.so:lib/weakrefso2.so bin/main_weakref`
 
+cxa: `LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so /usr/bin/java`
+
+`/bin/busybox /bin/ls`
+` LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so /lib64/ld-linux-x86-64.so.2 /bin/busybox  ls `
+`LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so /lib64/ld-linux-x86-64.so.2 /bin/busybox  find /bin -name cat -exec /bin/ls / \; `
+`LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so /lib64/ld-linux-x86-64.so.2 /bin/busybox  nc -f /dev/pts/0  -e /bin/ls`
+`LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so /lib64/ld-linux-x86-64.so.2 /bin/busybox  openvt -c 5  -w /bin/ls > /tmp/ls.out`
+
+1. 
+`LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so /lib64/ld-linux-x86-64.so.2 /bin/busybox  run-parts  --regex '^main_.*$' ./bin/`
+
+-- No /bin/ls ---
+2. `mkdir /tmp/shadowrun; ln -s /bin/ls /tmp/shadowrun/ls; LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so /lib64/ld-linux-x86-64.so.2 /bin/busybox  run-parts   /tmp/shadowrun/`
+
+`LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so script -c /bin/ls`
+`LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so busybox setsid  -c /bin/ls`
+`LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so start-stop-daemon -x /bin/ls --start`
+`LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so taskset 0x00000001 /bin/ls`
+`LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so echo | xargs /bin/ls`
+
+`echo | LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so /lib64/ld-linux-x86-64.so.2 /bin/busybox  xargs /bin/ls`
+
+I mean ....
+`echo | LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so /lib64/ld-linux-x86-64.so.2 /bin/busybox  xargs /bin/busybox xargs xargs /bin/busybox /bin/ls`
+`echo | LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so /lib64/ld-linux-x86-64.so.2 /bin/busybox timeout 1000 /bin/ls`
+`echo | LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so /lib64/ld-linux-x86-64.so.2 /bin/busybox time /bin/ls`
+
 
 ## TODO
 - fully clean LD_PRELOAD  in ctor of an injector )libctx)

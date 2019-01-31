@@ -10,6 +10,7 @@
 
 static int gmon_ct=0, cxa_ct=0;
 
+// Weak ref check example. Alternative to dlopen()
 void debug(){
     printf("debug()\n");
     fflush(stdout);
@@ -25,6 +26,7 @@ void debug(){
     fflush(stdout);
 }
 
+// Injection to any ELF
 void __gmon_start__(){
 	 if (gmon_ct < 1 ){
 		 printf("in __gmon_start__ weak hook\n");
@@ -35,6 +37,7 @@ void __gmon_start__(){
 	 }
 }
 
+// Evasion trampoline (atexit hook)
 void __cxa_finalize() {
 	 if (cxa_ct < 1 ){
 		 printf("in __cxa_finalize weak hook\n");
@@ -43,4 +46,8 @@ void __cxa_finalize() {
 	 }else{
 		 printf("in __cxa_finalize weak hook but already started\n");
 	 }
+}
+
+void _Jv_RegisterClasses() {
+		 printf("in _Jv_RegisterClasses weak hook\n");
 }
