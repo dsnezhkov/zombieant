@@ -1,4 +1,4 @@
-#include "intrpso.h"
+#include "intrp.h"
 
 void before_main(void) __attribute__((constructor (101)));
 void before_main(void)
