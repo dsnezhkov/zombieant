@@ -69,3 +69,5 @@ I mean ....
 - multilib loading in LD_PRELOAD
 - __gmon_start__ (w) https://github.com/lattera/glibc/blob/master/csu/gmon-start.c
 	[ref] (https://stackoverflow.com/questions/12697081/what-is-gmon-start-symbol)
+- JNI LD_PRELOAD
+- execve LD_PRELOAD putenv?

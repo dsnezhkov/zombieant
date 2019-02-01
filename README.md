@@ -28,6 +28,6 @@ refer:
 `https://haxelion.eu/article/LD_NOT_PRELOADED_FOR_REAL/`
 
 
-` /lib64/ld-linux-x86-64.so.2  ./elfloader  hello.so  main1 `
+ /lib64/ld-linux-x86-64.so.2  ./elfloader  hello.so  main1 `
 
 `LD_PCMD="r:smtp" LD_MODULE="./lib/shim.so" LD_MODULE_ARGS="hello" LD_PRELOAD=./lib/libctx.so.1 /bin/ls`

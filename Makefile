@@ -7,7 +7,8 @@ SRC = $(CURDIR)/src
 BIN = $(CURDIR)/bin
 LIB = $(CURDIR)/lib
 
-all: libctx nomain main main_extern main_ctor main_init main_weakref weakrefso testso goshim
+all: libctx nomain main main_extern main_ctor main_init main_weakref weakrefso mctrso intrpso
+all_plus_shims: all goshim
 
 goshim:
 	$(GO) build -o $(LIB)/shim.so -buildmode=c-shared $(SRC)/shim.go
@@ -18,12 +19,15 @@ nomain:
 nomain_interp:
 	$(CC) $(CFLAGS) -shared -Wl,-e,fn_no_main $(SRC)/nomain_interp.c -o $(BIN)/nomain_interp
 
-testso:
-	$(CC) $(CFLAGS) -fPIC -shared $(SRC)/testso.c -Wl,-soname,libtestso.so -o $(LIB)/libtestso.so
+libmctr:
+	$(CC) $(CFLAGS) -fPIC -shared $(SRC)/mctr.c -Wl,-soname,libmctr.so -o $(LIB)/libmctr.so
 
-weakrefso:
-	$(CC) $(CFLAGS) -fPIC -shared $(SRC)/weakrefso.c -o $(LIB)/weakrefso.so
-	$(CC) $(CFLAGS) -fPIC -shared $(SRC)/weakrefso2.c -o $(LIB)/weakrefso2.so
+libintrp:
+	$(CC) $(CFLAGS) -fPIC -shared $(SRC)/intrp.c -Wl,-soname,libintrp.so -o $(LIB)/libintrp.so
+
+libweakref: 
+	$(CC) $(CFLAGS) -fPIC -shared $(SRC)/libweakref.c -o $(LIB)/libweakref.so
+	$(CC) $(CFLAGS) -fPIC -shared $(SRC)/libweakref2.c -o $(LIB)/libweakref2.so
 
 main_weakref:
 	$(CC) $(CFLAGS) -fPIC  $(SRC)/main_weakref.c -o $(BIN)/main_weakref
@@ -58,13 +62,16 @@ clean_psevade:
 clean_main:
 	$(RM) $(BIN)/main $(BIN)/main_extern $(BIN)/main_ctor $(BIN)/main_init $(BIN)/nomain $(BIN)/nomain_interp $(BIN)/main_weakref
 
-clean_testso:
-	$(RM) $(LIB)/libtestso.so
+clean_mctrso:
+	$(RM) $(LIB)/libmctrso.so
 
-clean_weakrefso:
-	$(RM) $(LIB)/weakrefso.so $(LIB)/weakrefso2.so
+clean_intrpso:
+	$(RM) $(LIB)/libintrpso.so
+
+clean_libweakref:
+	$(RM) $(LIB)/libweakref.so $(LIB)/libweakref2.so
 
 clean_shims:
 	$(RM) $(LIB)/shim.so
 
-clean: clean_psevade clean_main clean_testso clean_shims clean_weakrefso 
+clean: clean_psevade clean_main clean_libmctr clean_libweakref  clean_libintrp clean_shims

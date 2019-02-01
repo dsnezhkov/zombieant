@@ -1,10 +1,5 @@
 #include <stdio.h>
-#include "weakref.h"
-
-/*extern void (*debugfunc)(void) = debug;
-
-if (debugfunc) (*debugfunc)();
-*/
+#include "weakref_main.h"
 
 
 
