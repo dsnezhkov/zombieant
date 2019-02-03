@@ -1,6 +1,8 @@
 #include "intrp.h"
 
-void before_main(void) __attribute__((constructor (101)));
+volatile sig_atomic_t gotint = 0;
+
+void before_main(void) __attribute__((constructor));
 void before_main(void)
 {
 
@@ -8,18 +10,36 @@ void before_main(void)
 
     printf("Trigger SIGFPRE handler\n");
     try_division(1,0);
+    setSigHandler(500000);
 
 }
 
-//delayed invocation
-void after_main(void) __attribute__((destructor (101)));
-void after_main(void)
-{
-
-    /* This is run after main() returns (or exit() is called) */
-    printf("After main()\n");
-    try_division(1,0);
+void doWork(void){
+	printf("Executing payloads here ...\n");
 }
+
+void setSigHandler(int sleep_interval){
+
+	printf("Setting SIGHUP Signal handler ...\n");
+    printf("PPID: %d PID: %d \n", getppid(), getpid());
+    signal(SIGHUP, handleSigHup);
+    for (;;) {
+        if (gotint)
+            break;
+        usleep(sleep_interval);
+    }
+	printf("Signal handler got signal ... \n");
+	doWork();
+}
+ 
+void handleSigHup(int signal) {
+    /*
+     * Signal safety: It is not safe to call clock(), printf(),
+     * or exit() inside a signal handler. Instead, we set a flag.
+     */
+    gotint = 1;
+}
+ 
 
 // ref: http://rosettacode.org/wiki/Detect_division_by_zero#C 
 /*
@@ -31,6 +51,7 @@ void after_main(void)
  */
 void fpe_handler(int signal, siginfo_t *w, void *a)
 {
+	printf("In SIGFPE handler\n");
 	siglongjmp(fpe_env, w->si_code);
 	/* NOTREACHED */
 }
@@ -93,6 +114,7 @@ void try_division(int x, int y)
 		case FPE_INTDIV: /* integer division by zero */
 		case FPE_FLTDIV: /* float division by zero */
 			printf("%d / %d: caught division by zero!\n", x, y);
+			doWork();
 			break;
 		default:
 			printf("%d / %d: caught mysterious error!\n", x, y);

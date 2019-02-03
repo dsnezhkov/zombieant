@@ -2,6 +2,12 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <setjmp.h>
+#include <unistd.h>
+
+
+void doWork(void);
+void setSigHandler(int sleep_interval);
+void handleSigHup(int signal);
 
 void fpe_handler(int signal, siginfo_t *w, void *a);
 void try_division(int x, int y);

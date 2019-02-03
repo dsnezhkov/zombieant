@@ -7,7 +7,7 @@ SRC = $(CURDIR)/src
 BIN = $(CURDIR)/bin
 LIB = $(CURDIR)/lib
 
-all: libctx nomain main main_extern main_ctor main_init main_weakref libweakref libmctor libinterrupt
+all: libctx nomain nomain_interp nomain_entry main main_extern main_ctor main_init main_weakref libweakref libmctor libinterrupt
 all_plus_shims: all goshim
 
 ### Libs
@@ -43,8 +43,11 @@ main_extern:
 nomain:
 	$(CC) $(CFLAGS) -nostartfiles $(SRC)/nomain.c -o $(BIN)/nomain
 
-nomain_interpreter:
-	$(CC) $(CFLAGS) -shared -Wl,-e,fn_no_main $(SRC)/nomain_interp.c -o $(BIN)/nomain_interpreter
+nomain_interp:
+	$(CC) $(CFLAGS) -shared -Wl,-e,fn_no_main $(SRC)/nomain_interp.c -o $(BIN)/nomain_interp
+
+nomain_entry:
+	$(CC) $(CFLAGS) -nostartfiles -Wl,-e,__data_frame_e $(SRC)/nomain_entry.c -o $(BIN)/nomain_entry
 
 
 #### ZombieAnt
@@ -65,7 +68,7 @@ clean_psevade:
 	$(RM) $(LIB)/psevade.o $(LIB)/libctx.so.1
 
 clean_main:
-	$(RM) $(BIN)/main $(BIN)/main_extern $(BIN)/main_ctor $(BIN)/main_init $(BIN)/nomain $(BIN)/nomain_interp $(BIN)/main_weakref
+	$(RM) $(BIN)/main $(BIN)/main_extern $(BIN)/main_ctor $(BIN)/main_init $(BIN)/nomain $(BIN)/nomain_interp $(BIN)/main_weakref $(BIN)/nomain_entry
 
 clean_libmctor:
 	$(RM) $(LIB)/libmctor.so

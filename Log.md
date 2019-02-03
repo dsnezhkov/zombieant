@@ -35,6 +35,8 @@ What is you can be agnostic to the application you are tryint to control
 
 `LD_PRELOAD=lib/weakrefso.so:lib/weakrefso2.so bin/main_weakref`
 
+`LD_LIBRARY_PATH=$LD_LIBRARY_PATH:../lib LD_PRELOAD=libweakref.so:libweakref2.so ../bin/main_weakref`
+
 cxa: `LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so /usr/bin/java`
 
 `/bin/busybox /bin/ls`
@@ -62,6 +64,12 @@ I mean ....
 `echo | LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so /lib64/ld-linux-x86-64.so.2 /bin/busybox timeout 1000 /bin/ls`
 `echo | LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so /lib64/ld-linux-x86-64.so.2 /bin/busybox time /bin/ls`
 
+I meean ...... 
+`LD_PRELOAD=./lib/weakrefso.so:./lib/weakrefso2.so /lib64/ld-linux-x86-64.so.2  vi -ensX $(/bin/busybox mktemp)  -c ':1,$d' -c ':silent !/bin/ls'  -c ':wq'`
+
+Breaks TTY
+`vi -ensX $(/lib64/ld-linux-x86-64.so.2 /bin/busybox mktemp)  -c ':1,$d' -c ':silent !/bin/ls'  -c ':wq'`
+
 
 ## TODO
 - fully clean LD_PRELOAD  in ctor of an injector )libctx)
@@ -71,3 +79,4 @@ I mean ....
 	[ref] (https://stackoverflow.com/questions/12697081/what-is-gmon-start-symbol)
 - JNI LD_PRELOAD
 - execve LD_PRELOAD putenv?
+- malisal ELF loader work
