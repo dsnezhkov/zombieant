@@ -52,7 +52,7 @@ void entry(char* name)
   }
   // Authenticate ourselves
   //password = getpass("Password: ");
-  password = "Drg4r1c3";
+  password = "---";
   rc = ssh_userauth_password(my_ssh_session, NULL, password);
   if (rc != SSH_AUTH_SUCCESS)
   {

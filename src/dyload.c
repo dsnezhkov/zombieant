@@ -5,16 +5,6 @@
 #include <dlfcn.h>
 
 
-#ifndef BB_WAIT
-#define BB_WAIT 10 // Wait interval between pranks
-#endif 
-
-#ifndef BB_DEBUG
-#define BB_DEBUG 
-#endif
-
-// gcc -o bb bb.c  -ldl
-
 void doWork(void)
 {
   printf("Working ...\n");

