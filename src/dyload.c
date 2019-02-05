@@ -9,7 +9,7 @@ void doWork(void)
 {
   printf("Working ...\n");
   while(1) 
-    sleep(BB_WAIT); /* wait X seconds */
+    sleep(5); /* wait X seconds */
 }
 
 /*------------------------------------*/
@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
       exit(1);
    }
 
-	void *handle;
+   void *handle;
    void (*entry)(const char*);
 
    handle = dlopen(argv[1], RTLD_LAZY);
