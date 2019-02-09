@@ -1,8 +1,9 @@
+#!/usr/bin/env python
 from __future__ import print_function # Only Python 2.x
+import sys
 import ctypes
 import fcntl
 import os
-import sys
 import subprocess 
 import urllib2
 
@@ -150,19 +151,39 @@ def executePLD(soPath, cmd):
 
 
 
+
 if __name__ == '__main__':
 
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 3:
         raise ValueError("Need file to preload")
 
     soPath = "/root/Code/zombieant/lib/libmctor.so"
     urlSoPath = "http://127.0.0.1:8080/libmctor.so"
     fPath = "/tmp/pypipe"
-    cmd=sys.argv[1]
-    print("Cmd: ", cmd)
-    cmd_args=" ".join(sys.argv[2:])
-    print("Cmd Args: ", cmd_args)
 
+    pname=sys.argv[1]
+    print("Process name: ", pname)
+
+    cmd=sys.argv[2]
+    print("Cmd: ", cmd)
+
+    cmd_args=sys.argv[3:]
+    print("Cmd Args from shell: ", cmd_args)
+
+    cmd_popen = [cmd] + cmd_args
+    print("Popen args are: ", cmd_popen)
+
+    # Change process name (non-portable, incomplete...)
+    sys.path.append("./ext")
+
+    try:
+       import setproctitle
+       setproctitle.setproctitle(pname)
+    except ImportError:
+       pass
+
+
+   
     soMemPath = urlToMemd(urlSoPath)
     print(soMemPath)
     #soMemPath = fileToMemd(soPath)
@@ -175,6 +196,6 @@ if __name__ == '__main__':
 
     #executeP(eSoPath)
 
-    for line in executePLD(eSoPath, [cmd, cmd_args]):
+    for line in executePLD(eSoPath, cmd_popen):
         print(line, end="")
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# LD_MODULE=./lib/cg.s^CLD_CMD="r:smtpd" LD_PRELOAD="./lib/libctx.so.1" /usr/bin/cat
+# LD_MODULE=./lib/cg.so LD_CMD="r:smtpd" LD_PRELOAD="./lib/libctx.so.1" /usr/bin/cat
 
 usage(){
 	echo 
