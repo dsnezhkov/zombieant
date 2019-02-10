@@ -534,7 +534,8 @@ A: SQLite3
 
 Memory mode. 
 
-swqlite:
+swqlite - shared
+gcc -c sqlite.c
 gcc -shared -o libsqlite3.so -fPIC sqlite3.o -ldl -lpthr
 
 driver:
@@ -576,6 +577,16 @@ LD_LIBRARY_PATH=. LD_PRELOAD=./libsqlite3.so ./driver
 opened SQLite handle successfully.
 database closed.
 ```
+
+Static compile:
+
+sqlite
+`gcc -DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_LOAD_EXTENSION -c  sqlite3.c`
+driver:
+`gcc -Os -static  driver.c -o driver sqlite3.o   -I`pwd` `
+or:
+`ar rcs sqlite3.a sqlite3.o`
+`gcc -Os -static  driver.c -o driver sqlite3.o   -I`pwd` `
 
 ### Mycropython
 
@@ -732,7 +743,62 @@ int fn_no_main() {
  - 1 stage ad-hoc streamlining of a) 
 
 
-
-
 - malisal ELF loader work
 - https://github.com/daveho/EasySandbox
+
+
+### Libcurl 
+
+- zlib  dep:
+
+./configure --prefix=/root/Code/zombieant/ext/zlib --static 
+make 
+make install
+
+produces `/root/Code/zombieant/ext/zlib/lib/libz.a`
+ldd libz.a 
+	not a dynamic executable
+
+- openssl dep: 
+
+1. ./config --prefix=/root/Code/zombieant/ext/openssl  --with-zlib-include=/root/Code/zombieant/ext/zlib/include --with-zlib-lib=/root/Code/zombieant/ext/zlib/lib no-shared
+
+2. CFLAGS="-static -static-libgcc" make &&  make install
+
+ ldd ./libssl.a ./libcrypto.a
+./libssl.a:
+	not a dynamic executable
+./libcrypto.a:
+	not a dynamic executable
+
+
+- libcurl:
+./configure  -disable-shared -enable-static --with-ssl=/root/Code/zombieant/ext/openssl  -with-zlib=/root/Code/zombieant/ext/zlib --disable-manual --without-librtmp --prefix=/root/Code/zombieant/ext/curl 
+make 
+makie install
+
+ls -lh lib/libcurl.a 
+-rw-r--r-- 1 root root 884K Feb  9 16:53 lib/libcurl.a
+
+
+gcc cget.c -o cget -I../include /root/Code/zombieant/ext/curl/lib/libcurl.a /root/Code/zombieant/ext/openssl/lib/libssl.a /root/Code/zombieant/ext/zlib/lib/libz.a /root/Code/zombieant/ext/openssl/lib/libcrypto.a -ldl -lpthread
+
+
+
+memfd  linsk:
+
+https://x-c3ll.github.io/posts/fileless-memfd_create/
+
+### Compilation notes:
+https://renenyffenegger.ch/notes/development/languages/C-C-plus-plus/GCC/create-libraries/index
+https://www.cprogramming.com/tutorial/shared-libraries-linux-gcc.html
+
+Create the object files for the static library (without -fPIC)
+gcc -c       src/tq84/add.c    -o bin/static/add.o
+
+object files for shared libraries need to be compiled as position independent
+code (-fPIC) because they are mapped to any position in the address space.
+
+gcc -c -fPIC src/tq84/add.c    -o bin/shared/add.o
+
+
