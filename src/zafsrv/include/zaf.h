@@ -19,14 +19,13 @@ typedef struct node {
 } node_t;
 
 node_t * head = NULL;
-int push(node_t * head, char* path, char * mname);
-int push_first(node_t * head, char* path, char * mname);
-int check_empty(node_t * head);
-int list_sz(node_t * head);
-void print_list(node_t * head);
+int  push(node_t * head, char* path, char * mname);
+int  push_first(node_t * head, char* path, char * mname);
+int  check_empty(node_t * head);
+int  list_sz(node_t * head);
 void write_modlist(node_t * head, int sock);
-int doprocessing (int sock, node_t * head);
-int setupCmdP();
+int  processCommandReq (int sock, node_t * head);
+int  setupCmdP();
 
 typedef struct {
  int shm_fd;

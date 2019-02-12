@@ -82,8 +82,8 @@ int open_ramfs(void) {
 	if (kernel_version() == 0) {
 		shm_fd = shm_open(SHM_NAME, O_RDWR | O_CREAT, S_IRWXU);
 		if (shm_fd < 0) { //Something went wrong :(
-			fprintf(stderr, "[-] Could not open file descriptor\n");
-			exit(-1);
+			log_fatal("shm_fd: Could not open file descriptor");
+			return 1;
 		}
 	}
 	// If we have a kernel >= 3.17
@@ -91,8 +91,8 @@ int open_ramfs(void) {
 	else {
 		shm_fd = memfd_create(SHM_NAME, 1);
 		if (shm_fd < 0) { //Something went wrong :(
-			fprintf(stderr, "[- Could not open file descriptor\n");
-			exit(-1);
+			log_fatal("memfd_create: Could not open file descriptor\n");
+			return -1;
 		}
 	}
 	return shm_fd;
@@ -254,21 +254,21 @@ int setupCmdP(){
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (sockfd < 0) {
-      log_error("ERROR opening socket");
+      log_error("Error opening socket()");
       return -1;
     }
 
     /* Initialize socket structure */
     bzero((char *) &serv_addr, sizeof(serv_addr));
-    portno = 5001;
+    portno = 0; // random
 
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
+    serv_addr.sin_addr.s_addr = htonl(0x7f000001L); // 127.0.0.1
     serv_addr.sin_port = htons(portno);
 
     /* Now bind the host address using bind() call.*/
     if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
-      log_error("ERROR on binding");
+      log_error("Error on bind()");
       return -1;
     }
 
@@ -279,37 +279,37 @@ int setupCmdP(){
 
     setsockopt(sockfd, SOL_TCP, TCP_NODELAY, &one, sizeof(one));
     listen(sockfd,5);
+    log_info("Listening on port");
     clilen = sizeof(cli_addr);
 
 
     while (1) {
-      log_info("Accepting requests");
       newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
 
       if (newsockfd < 0) {
-         log_error("ERROR on accept");
+         log_error("Error on accept()");
          return -1;
       }
+      log_info("Accepting requests");
 
       /* Create child process */
       pid = fork();
 
       if (pid < 0) {
-         perror("ERROR on fork");
+         perror("Error on fork()");
          return -1;
       }
 
       if (pid == 0) {
          /* This is the client process */
          close(sockfd);
-         doprocessing(newsockfd, head);
+         processCommandReq(newsockfd, head);
          exit(0);
       }
       else {
          close(newsockfd);
       }
 
-      //doprocessing(newsockfd, head);
 
     } /* end of while */
 
@@ -317,19 +317,59 @@ int setupCmdP(){
 }
 
 
-int doprocessing (int sock, node_t * head) {
+int processCommandReq (int sock, node_t * head) {
    int n, head_sz;
    char buffer[MAX_BUF];
+   cJSON * root;
+   cJSON * cmdName;
+
+
    bzero(buffer,MAX_BUF);
    n = read(sock,buffer,MAX_BUF-1);
 
    if (n < 0) {
-      log_error("ERROR reading from socket");
+      log_error("Error reading from socket");
       return -1;
    }
 
-   log_info("In: %s\n",buffer);
-   write_modlist(head, sock);
+   log_info("Request payload: >> %s <<",buffer);
+
+   // Rudimentary checks for JSON. this library is SIGSEGV if invalid. We take that chance for now.
+   if ( strchr(buffer, '}') == NULL \
+                || strchr(buffer, '{') == NULL  \
+                || strchr(buffer, '"') == NULL ){
+
+        log_debug("Possibly invalid JSON, not parsing: %s", buffer); // not processing
+        return 1;
+   }
+
+   root = cJSON_Parse(buffer);
+
+   if (root == NULL)
+   {
+        log_warn("JSON: Error parsing");
+        return -2;
+   }
+
+   cmdName = cJSON_GetObjectItemCaseSensitive(root, "command");
+
+   if (cJSON_IsString(cmdName) && (cmdName->valuestring != NULL))
+   {
+     if (strcmp(cmdName->valuestring, "listmod") == 0)
+     {
+       log_debug("[Command] : %s", cmdName->valuestring);
+       write_modlist(head, sock);
+     }
+     else if (strcmp(cmdName->valuestring, "loadmod") == 0)
+     {
+       log_debug("[Command] : %s", cmdName->valuestring);
+     }
+     else {
+       log_debug("Command request (%s)", cmdName->valuestring);
+     }
+   }
+
+   cJSON_Delete(root);
 
    return 0;
 
@@ -362,21 +402,10 @@ void write_modlist(node_t * head, int sock) {
         n = write(sock,entry,strlen(entry));
 
         if (n < 0) {
-          log_error("ERROR writing to socket");
+          log_error("Error writing to socket");
         }
         free(entry);
         current = current->next;
-    }
-}
-void print_list(node_t * head) {
-    node_t * current = head;
-    int c = 1;
-
-    printf("\n=== \n");
-    while (current != NULL) {
-        printf("%d: %s - %s\n", c, current->mpath, current->mname);
-        current = current->next;
-        c++;
     }
 }
 
@@ -386,7 +415,7 @@ int push_first(node_t * head, char* path, char* mname) {
     strncpy(head->mpath, path, strlen(path));
     strncpy(head->mname, mname, strlen(mname));
     head->next = NULL;
-    log_debug("ModTable: Added: %s : %s\n", head->mname, head->mpath);
+    log_debug("ModTable: Added: %s : %s", head->mname, head->mpath);
 }
 
 int push(node_t * head, char* path, char* mname) {
