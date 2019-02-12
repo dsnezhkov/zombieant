@@ -246,7 +246,8 @@ int main (int argc, char **argv) {
         log_error("ZAF: Log File not created okay, errno = %d", errno);
     }else{
         log_set_fp(fp); 
-        log_set_level(2); //  "TRACE", "DEBUG", >"INFO"<, "WARN", "ERROR", "FATAL"
+        //log_set_level(2); //  "TRACE", "DEBUG", >"INFO"<, "WARN", "ERROR", "FATAL"
+        log_set_level(1); 
         log_set_quiet(logquiet);
     }
 
@@ -361,7 +362,6 @@ int setupCmdP(){
     unsigned int portno, clilen, sockfd, newsockfd;
     struct sockaddr_in serv_addr, cli_addr; // AF_INET
     // struct sockaddr_un serv_addr_un; // AF_UNIX
-    int pid;
     int one = 1;
 
     /* First call to socket() function */
@@ -398,35 +398,19 @@ int setupCmdP(){
 
 
     while (1) {
+      log_info("Accepting requests");
       newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
 
       if (newsockfd < 0) {
          log_error("Error on accept()");
-         return -1;
-      }
-      log_info("Accepting requests");
-
-      
-      /* Create child process */
-      pid = fork();
-
-      if (pid < 0) {
-         perror("Error on fork()");
-         return -1;
+         continue;
       }
 
-      if (pid == 0) {
-         /* This is the client process */
-         close(sockfd);
-         processCommandReq(newsockfd, head);
-         exit(0);
-      }
-      else {
-         close(newsockfd);
-      }
+      // We are not dorking as we wat to to preserve the PID for FD's
+      processCommandReq(newsockfd, head);
+      close(newsockfd);
 
-
-    } /* end of while */
+    }
 
     return 0;
 }
@@ -435,8 +419,14 @@ int setupCmdP(){
 int processCommandReq (int sock, node_t * head) {
    int n;
    char buffer[MAX_BUF];
-   cJSON * root;
-   cJSON * cmdName;
+   int status = 0;
+
+   cJSON * root = NULL;
+   cJSON * cmdName = NULL;
+
+   cJSON * loadmod_arg = NULL;
+   cJSON * loadmod_args = NULL;
+   cJSON * modUrl = NULL;
 
 
    bzero(buffer,MAX_BUF);
@@ -463,7 +453,8 @@ int processCommandReq (int sock, node_t * head) {
    if (root == NULL)
    {
         log_warn("JSON: Error parsing");
-        return -2;
+        status=1;
+        goto end;
    }
 
    cmdName = cJSON_GetObjectItemCaseSensitive(root, "command");
@@ -474,19 +465,39 @@ int processCommandReq (int sock, node_t * head) {
      {
        log_debug("[Command] : %s", cmdName->valuestring);
        write_modlist(head, sock);
+       status=1;
+       goto end;
      }
      else if (strcmp(cmdName->valuestring, "loadmod") == 0)
      {
+
+       loadmod_args = cJSON_CreateArray();
+       if (loadmod_args == NULL)
+       {
+           log_debug("[Command] loadmod : cJSON_CreateArray()");
+           status=1;
+           goto end;
+       }
+
        log_debug("[Command] : %s", cmdName->valuestring);
+       loadmod_args = cJSON_GetObjectItemCaseSensitive(root, "args");
+       cJSON_ArrayForEach(loadmod_arg, loadmod_args)
+       {
+            modUrl = cJSON_GetObjectItemCaseSensitive(loadmod_arg, "modurl");
+            log_debug("[Command] : modurl (%s)", modUrl->valuestring);
+            load_mod(head, modUrl->valuestring);
+       }
+
      }
      else {
        log_debug("Command request (%s)", cmdName->valuestring);
      }
    }
 
+end:
    cJSON_Delete(root);
 
-   return 0;
+   return status;
 
 }
 // ------------------- Node table ----------------
@@ -528,6 +539,46 @@ void write_modlist(node_t * head, int sock) {
         current = current->next;
     }
 }
+
+int load_mod(node_t * head, char * url) {
+
+    int fd;
+
+    CURLU *h;
+    CURLUcode uc;
+    char *path;
+
+    h = curl_url();
+    if(!h){
+        log_debug("LoadMod: Unable to get cURL object\n");
+        return 1;
+    }
+
+    uc = curl_url_set(h, CURLUPART_URL, url, 0);
+    if(uc)
+      goto clean;
+
+
+    uc = curl_url_get(h, CURLUPART_PATH, &path, 0);
+    if(!uc) {
+        log_debug("Path: %s\n", path);
+    }
+
+    log_debug("LoadMod: Downloading %s -> %s", url, path);
+    fd = download_to_RAM(url);
+    if (fd != 0){
+        log_debug("LoadMod: fetched OK, setting Mem table");
+        setMemfdTbl(fd, path );
+    }
+
+clean:
+    curl_free(path);
+    curl_url_cleanup(h); /* free url handle */
+
+    return 0;
+
+}
+
 
 int push_first(node_t * head, char* path, char* mname) {
 

