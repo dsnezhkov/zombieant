@@ -802,3 +802,17 @@ code (-fPIC) because they are mapped to any position in the address space.
 gcc -c -fPIC src/tq84/add.c    -o bin/shared/add.o
 
 
+### LibcJson:
+git clone https://github.com/DaveGamble/cJSON
+make all
+gcc -I. -o main main.c libcjson.a
+
+
+
+
+    gcc $(CFLAGS) zaf.c -o zaf -I$(EXTROOT)/curl/include -I. \
+        $(LIBROOT)/libcurl.a \
+        $(LIBROOT)/libssl.a \
+        $(LIBROOT)/libz.a \
+        $(LIBROOT)/libcjson.a \
+        $(LIBROOT)/libcrypto.a  $(LIBS) -lrt

