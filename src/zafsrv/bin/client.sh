@@ -25,6 +25,21 @@ cat<<! 1>&3
 
     timeout 1s /bin/cat <&3
 }
+unloadmod(){
+    exec 3<>/dev/tcp/127.0.0.1/$PORT
+
+cat<<! 1>&3
+{ 
+ "command": "unloadmod", 
+ "args": [ 
+       { "modname": "$1" } 
+  ] 
+}"
+!
+
+    timeout 1s /bin/cat <&3
+}
+
 
 CMD=$1
 CMDARG=$2
@@ -33,6 +48,7 @@ then
     echo "Usage: $0 <cmd> [cmd args]"
     echo "Example: $0 listmod"
     echo "Example: $0 loadmod http://127.0.0.1:8080/hax.so"
+    echo "Example: $0 unloadmod /hax.so"
     exit 1
 fi
 

