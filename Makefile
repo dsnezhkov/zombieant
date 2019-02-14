@@ -29,7 +29,7 @@ main_weakref:
 	$(CC) $(CFLAGS) -fPIC  $(SRC)/main_weakref.c -o $(BIN)/main_weakref
 
 main:
-	$(CC) $(CFLAGS) $(SRC)/main.c -o $(BIN)/main
+	$(CC) $(CFLAGS) -static-libgcc -static-libstdc++ $(SRC)/main.c -o $(BIN)/main -include /root/Code/zombieant/ext/glibc_version_header/version_headers/force_link_glibc_2.17.h
 
 main_ctor:
 	$(CC) $(CFLAGS) $(SRC)/main_ctor.c -o $(BIN)/main_ctor

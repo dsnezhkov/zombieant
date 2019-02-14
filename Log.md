@@ -761,7 +761,22 @@ ldd libz.a
 
 - openssl dep: 
 
+### LIBOPENSSL: 
+https://wiki.openssl.org/index.php/Compilation_and_Installation
+
+with zlib:
 1. ./config --prefix=/root/Code/zombieant/ext/openssl  --with-zlib-include=/root/Code/zombieant/ext/zlib/include --with-zlib-lib=/root/Code/zombieant/ext/zlib/lib no-shared
+
+without zlib:
+Centos: 
+depends:
+`yum install gcc glibc-static libstdc++-static -y`
+
+`./config no-shared no-threads no-dso no-engine no-err no-psk no-srp no-ec2m no-weak-ssl-ciphers no-idea no-comp no-ssl2 no-ssl3 -DOPENSSL_USE_IPV6=0 -static -static-libgcc --prefix=/root/Code/dist/openssl`
+
+make 
+make install_sw (no man pages)
+
 
 2. CFLAGS="-static -static-libgcc" make &&  make install
 
@@ -772,13 +787,33 @@ ldd libz.a
 	not a dynamic executable
 
 
-- libcurl:
-./configure  -disable-shared -enable-static --with-ssl=/root/Code/zombieant/ext/openssl  -with-zlib=/root/Code/zombieant/ext/zlib --disable-manual --without-librtmp --prefix=/root/Code/zombieant/ext/curl 
+### LIBCURL 
+`git clone https://github.com/curl/curl`
+
+Depends:
+`yum install libtool autoconf automake nroff m4 -y`
+./buildconf 
+
+
+Debian: ./configure  -disable-shared -enable-static --with-ssl=/root/Code/zombieant/ext/openssl  -with-zlib=/root/Code/zombieant/ext/zlib --disable-manual --without-librtmp --prefix=/root/Code/zombieant/ext/curl 
 make 
-makie install
+make install
 
 ls -lh lib/libcurl.a 
 -rw-r--r-- 1 root root 884K Feb  9 16:53 lib/libcurl.a
+
+
+CentOS (new):
+
+```
+CPPFLAGS="-I/root/Code/openssl/include" LDFLAGS="-L/root/Code/dist/openssl/lib -static" LDFLAGS=-Wl,-R/root/Code/dist/openssl/lib ./configure --with-ssl --disable-debug --enable-optimize --disable-curldebug  --disable-ares  --disable-shared --disable-thread --disable-rt --disable-largefile --disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smtp --disable-gopher --disable-manual --disable-libcurl-option --disable-ipv6 --disable-threaded-resolver --disable-pthreads --disable-verbose --disable-tls-srp --enable-unix-sockets --disable-cookies --without-winssl --without-schannel --without-darwinssl --without-polarssl --without-mbedtls --without-cyassl --without-wolfssl --without-mesalink --without-nss --without-libpsl --without-libmetalink --without-librtmp --without-winidn --without-libidn2 --enable-static --prefix=/root/Code/dist/curl
+
+make curl_LDFLAGS=-all-static
+```
+
+
+ ls -lh libcurl.a
+-rw-r--r--. 1 root root 646K Feb 14 02:21 libcurl.a
 
 
 gcc cget.c -o cget -I../include /root/Code/zombieant/ext/curl/lib/libcurl.a /root/Code/zombieant/ext/openssl/lib/libssl.a /root/Code/zombieant/ext/zlib/lib/libz.a /root/Code/zombieant/ext/openssl/lib/libcrypto.a -ldl -lpthread
@@ -804,15 +839,54 @@ gcc -c -fPIC src/tq84/add.c    -o bin/shared/add.o
 
 ### LibcJson:
 git clone https://github.com/DaveGamble/cJSON
-make all
-gcc -I. -o main main.c libcjson.a
+`make all`
+`make install DESTDIR="/root/Code/dist/cJSON"`
+`cp libcjson.a /root/Code/dist/cJSON/usr/local/lib`
+
+example `gcc -I. -o main main.c libcjson.a`
+
+
+## Cross-platform build Debian ->Centos
+> Note:  this will build all supported versions as first prerequisite
+
+```python
+SUPPORTED_VERSIONS = [
+    Version(2, 5),
+    Version(2, 5, 1),
+    Version(2, 6),
+    Version(2, 6, 1),
+    Version(2, 7),
+    Version(2, 8),
+    Version(2, 9),
+    Version(2, 10, 2),
+    Version(2, 11, 3),
+    Version(2, 12, 2),
+    Version(2, 13),
+    Version(2, 14),
+    Version(2, 14, 1),
+    Version(2, 15),
+    Version(2, 16),
+    Version(2, 17),
+    Version(2, 18),
+    Version(2, 19),
+    Version(2, 20),
+    Version(2, 21),
+    Version(2, 22),
+    Version(2, 23),
+    Version(2, 24),
+    Version(2, 25),
+    Version(2, 26),
+    Version(2, 27),
+]
+```
+
+`git clone https://github.com/wheybags/glibc_version_header`
+`./glibc_version_header_gen.py`
+
+- libc version: 
+`/lib64/libc.so.6 | head -1 `
+`ldd --version | head -1`
 
 
 
 
-    gcc $(CFLAGS) zaf.c -o zaf -I$(EXTROOT)/curl/include -I. \
-        $(LIBROOT)/libcurl.a \
-        $(LIBROOT)/libssl.a \
-        $(LIBROOT)/libz.a \
-        $(LIBROOT)/libcjson.a \
-        $(LIBROOT)/libcrypto.a  $(LIBS) -lrt

