@@ -768,8 +768,8 @@ with zlib:
 1. ./config --prefix=/root/Code/zombieant/ext/openssl  --with-zlib-include=/root/Code/zombieant/ext/zlib/include --with-zlib-lib=/root/Code/zombieant/ext/zlib/lib no-shared
 
 without zlib:
-Centos: 
-depends:
+
+Centos depends:
 `yum install gcc glibc-static libstdc++-static -y`
 
 `./config no-shared no-threads no-dso no-engine no-err no-psk no-srp no-ec2m no-weak-ssl-ciphers no-idea no-comp no-ssl2 no-ssl3 -DOPENSSL_USE_IPV6=0 -static -static-libgcc --prefix=/root/Code/dist/openssl`
@@ -790,26 +790,30 @@ make install_sw (no man pages)
 ### LIBCURL 
 `git clone https://github.com/curl/curl`
 
-Depends:
+CentOS Depends:
 `yum install libtool autoconf automake nroff m4 -y`
+
 ./buildconf 
 
+Dynamic build 
 
-Debian: ./configure  -disable-shared -enable-static --with-ssl=/root/Code/zombieant/ext/openssl  -with-zlib=/root/Code/zombieant/ext/zlib --disable-manual --without-librtmp --prefix=/root/Code/zombieant/ext/curl 
-make 
-make install
+`./configure  -disable-shared -enable-static --with-ssl=/root/Code/zombieant/ext/openssl  -with-zlib=/root/Code/zombieant/ext/zlib --disable-manual --without-librtmp --prefix=/root/Code/zombieant/ext/curl`
+`make`
+`make install`
 
 ls -lh lib/libcurl.a 
 -rw-r--r-- 1 root root 884K Feb  9 16:53 lib/libcurl.a
 
 
-CentOS (new):
+Static build:
 
-```
-CPPFLAGS="-I/root/Code/openssl/include" LDFLAGS="-L/root/Code/dist/openssl/lib -static" LDFLAGS=-Wl,-R/root/Code/dist/openssl/lib ./configure --with-ssl --disable-debug --enable-optimize --disable-curldebug  --disable-ares  --disable-shared --disable-thread --disable-rt --disable-largefile --disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smtp --disable-gopher --disable-manual --disable-libcurl-option --disable-ipv6 --disable-threaded-resolver --disable-pthreads --disable-verbose --disable-tls-srp --enable-unix-sockets --disable-cookies --without-winssl --without-schannel --without-darwinssl --without-polarssl --without-mbedtls --without-cyassl --without-wolfssl --without-mesalink --without-nss --without-libpsl --without-libmetalink --without-librtmp --without-winidn --without-libidn2 --enable-static --prefix=/root/Code/dist/curl
+Configure
+`CPPFLAGS="-I/root/Code/openssl/include" LDFLAGS="-L/root/Code/dist/openssl/lib -static" LDFLAGS=-Wl,-R/root/Code/dist/openssl/lib ./configure --with-ssl --disable-debug --enable-optimize --disable-curldebug  --disable-ares  --disable-shared --disable-thread --disable-rt --disable-largefile --disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smtp --disable-gopher --disable-manual --disable-libcurl-option --disable-ipv6 --disable-threaded-resolver --disable-pthreads --disable-verbose --disable-tls-srp --enable-unix-sockets --disable-cookies --without-winssl --without-schannel --without-darwinssl --without-polarssl --without-mbedtls --without-cyassl --without-wolfssl --without-mesalink --without-nss --without-libpsl --without-libmetalink --without-librtmp --without-winidn --without-libidn2 --enable-static --prefix=/root/Code/dist/curl`
 
-make curl_LDFLAGS=-all-static
-```
+`CPPFLAGS="-I/root/Code/zombieant/ext/openssl/include" LDFLAGS="-L/root/Code/zombieant/ext/openssl/lib -static" ./configure --with-ssl -without-zlib --disable-debug --enable-optimize --disable-curldebug  --disable-ares  --disable-shared --disable-thread --disable-rt --disable-largefile --disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smtp --disable-gopher --disable-manual --disable-libcurl-option --disable-ipv6 --disable-threaded-resolver --disable-pthreads --disable-verbose --disable-tls-srp --enable-unix-sockets --disable-cookies --without-winssl --without-schannel --without-darwinssl --without-polarssl --without-mbedtls --without-cyassl --without-wolfssl --without-mesalink --without-nss --without-libpsl --without-libmetalink --without-librtmp --without-winidn --without-libidn2 --enable-static --prefix=/root/Code/zombieant/ext/curl`
+
+Make:
+`make curl_LDFLAGS=-all-static`
 
 
  ls -lh libcurl.a
@@ -817,6 +821,10 @@ make curl_LDFLAGS=-all-static
 
 
 gcc cget.c -o cget -I../include /root/Code/zombieant/ext/curl/lib/libcurl.a /root/Code/zombieant/ext/openssl/lib/libssl.a /root/Code/zombieant/ext/zlib/lib/libz.a /root/Code/zombieant/ext/openssl/lib/libcrypto.a -ldl -lpthread
+
+
+
+git log -p -- ./Makefile
 
 
 

@@ -2,7 +2,7 @@
 
 // logging 
 #include "log.h"
-
+#include "zsignals.h"
 // ps renaming
 #include "spt_status.h"
 

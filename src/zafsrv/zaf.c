@@ -812,3 +812,15 @@ int push(node_t * head, int shm_fd, char* path, char* mname, char mstate[]) {
     return 0;
 }
 
+void cleanup(int cleanLog){
+    struct stat sb;
+
+    fclose(fp);
+
+    if (cleanLog) {
+        if (lstat(logFile, &sb) != -1){
+            unlink(logFile);
+        }
+    }
+}
+
