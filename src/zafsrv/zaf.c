@@ -43,7 +43,6 @@
 
 
 
-
 // Returns a file descriptor where we can write our shared object
 // TODO: refactor
 int open_ramfs(Shared_Mem_Fd * smf) {

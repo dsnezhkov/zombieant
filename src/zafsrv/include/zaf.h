@@ -2,7 +2,11 @@
 
 // logging 
 #include "log.h"
+#include "zstructs.h"
 #include "zsignals.h"
+#include "zutil.h"
+#include "zservice.h"
+
 // ps renaming
 #include "spt_status.h"
 
@@ -53,12 +57,13 @@ typedef struct modtbl {
 node_t * head = NULL;
 
 // Kernel Verison: memfd_create support
-typedef struct {
+/*typedef struct {
     int major;
     int minor;
     int memfd_supp;
 } memfd_kv;
 memfd_kv memfd_kv_s = {0,0,0};
+*/
 
 // Curl Shared Memory write callback
 typedef struct {
@@ -90,6 +95,8 @@ int   mod_name2fd(node_t * head, char * name, int loaded);
 void  load_so_path(char* path);
 void  doWork(void);
 void  cleanup_mod_resources(int shm_fd);
+
+
 
 
 #endif //_HAVE_ZAF_H
