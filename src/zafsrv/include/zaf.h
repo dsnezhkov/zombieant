@@ -85,7 +85,6 @@ int   load_mod(node_t * head, char * url);
 int   unload_mod(node_t * head, char * name);
 int   mark_delete_mod(node_t * head, int shm_fd);
 int   processCommandReq (int sock, node_t * head);
-int   backgroundDaemonLeader(void);
 int   setupCmdP(void);
 char* mod_name2path(node_t * head, char * name);
 int   mod_name2fd(node_t * head, char * name, int loaded);
