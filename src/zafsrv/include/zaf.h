@@ -71,21 +71,6 @@ typedef struct {
 
 
 
-/*** 
- *  Signals and handlers
- * 1 - SIGHUP
- * 2 - SIGUSR1
- * 3 - ...
- ***/
-volatile sig_atomic_t sigflag  = 0; 
-void setSignalHandlers(void);
-void handleSig(int signo);
-void doSigHup(void);
-void doSigUsr1(void);
-void doSigUsr2(void);
-void doSigInt(void);
-void doSigTerm(void);
-void cleanup(int);
 
 
 /*** 
