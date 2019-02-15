@@ -20,7 +20,6 @@
 #define ZPS_NAME "zaf"
 
 #define SHM_NAME " "                       // memfd:<...>
-#define __NR_memfd_create 319              // https://code.woboq.org/qt5/include/asm/unistd_64.h.html
 
 // Global daemon log
 char *logFile="/tmp/_mf.log";              // Location of the log
@@ -50,13 +49,6 @@ char *ccurl="http://127.0.0.1:8080/";
 memfd_kv memfd_kv_s = {0,0,0};
 */
 
-// Curl Shared Memory write callback
-typedef struct {
- int  shm_fd;
- char shm_fname[SHM_NAME_MAX];
- char shm_mname[6];
- int  shm_type; // 1 - shm, 2 - memfd
-} Shared_Mem_Fd;
 
 
 
@@ -65,9 +57,7 @@ typedef struct {
 /*** 
  *  Functions
  ***/
-int   processCommandReq (int sock, node_t * head);
 int   setupCmdP(void);
-void  load_so_path(char* path);
 void  doWork(void);
 
 
@@ -82,8 +72,8 @@ extern int   unload_mod(node_t * head, char * name);
 extern int   mark_delete_mod(node_t * head, int shm_fd);
 extern int   mod_name2fd(node_t * head, char * name, int loaded);
 extern char* mod_name2path(node_t * head, char * name);
-
-
+extern int   open_ramfs(Shared_Mem_Fd * smf);
+extern int   processCommandReq (int sock, node_t * head);
 
 
 #endif //_HAVE_ZAF_H

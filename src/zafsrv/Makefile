@@ -14,14 +14,15 @@ LIBS=-lrt -lpthread
 zaf: log.o spt.o zaf.o
 	gcc $(CFLAGS) \
 		$(ZBUILD)/zaf.o $(ZBUILD)/log.o $(ZBUILD)/spt.o $(ZBUILD)/zsignals.o \
-		$(ZBUILD)/zservice.o $(ZBUILD)/zutil.o $(ZBUILD)/zmodules.o $(ZBUILD)/zcommander.o\
+		$(ZBUILD)/zservice.o $(ZBUILD)/zutil.o $(ZBUILD)/zmodules.o $(ZBUILD)/zcommander.o \
+		$(ZBUILD)/zmemory.o \
 		-o $(ZBIN)/zaf \
 		$(ZLIB)/libcurl.a \
 	   	$(ZLIB)/libssl.a \
 		$(ZLIB)/libcjson.a \
 		$(ZLIB)/libcrypto.a  $(LIBS)
 
-zaf.o: zutil.o zsignals.o zservice.o zmodules.o
+zaf.o: zutil.o zsignals.o zservice.o zmodules.o zcommander.o zmemory.o
 	gcc $(CFLAGS) -c zaf.c -o$(ZBUILD)/zaf.o -I$(ZROOT)/../../ext/curl/include -I$(ZROOT)/include 
 
 zsignals.o: zutil.o
@@ -30,11 +31,17 @@ zsignals.o: zutil.o
 zservice.o: zutil.o
 	gcc $(CFLAGS) -c zservice.c -o$(ZBUILD)/zservice.o -I$(ZROOT)/include/
 
-zmodules.o: zutil.o
+zmodules.o: zutil.o zdownloader.o
 	gcc $(CFLAGS) -c zmodules.c -o$(ZBUILD)/zmodules.o -I$(ZROOT)/include/  -I$(ZROOT)/../../ext/curl/include
 
 zcommander.o: zmodules.o
 	gcc $(CFLAGS) -c zcommander.c -o$(ZBUILD)/zcommander.o -I$(ZROOT)/include/  
+
+zdownloader.o:
+	gcc $(CFLAGS) -c zdownloader.c -o$(ZBUILD)/zdownloader.o -I$(ZROOT)/include/ -I$(ZROOT)/../../ext/curl/include
+
+zmemory.o: zutil.o zmodules.o
+	gcc $(CFLAGS) -c zmemory.c -o$(ZBUILD)/zmemory.o -I$(ZROOT)/include/  
 
 zutil.o:
 	gcc $(CFLAGS) -c zutil.c -o$(ZBUILD)/zutil.o -I$(ZROOT)/include/
