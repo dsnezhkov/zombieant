@@ -63,8 +63,10 @@ memfd_kv memfd_kv_s = {0,0,0};
 
 // Curl Shared Memory write callback
 typedef struct {
- int shm_fd;
- char shm_name[SHM_NAME_MAX];
+ int  shm_fd;
+ char shm_fname[SHM_NAME_MAX];
+ char shm_mname[6];
+ int  shm_type; // 1 - shm, 2 - memfd
 } Shared_Mem_Fd;
 
 
@@ -104,7 +106,7 @@ char* mod_name2path(node_t * head, char * name);
 int   mod_name2fd(node_t * head, char * name, int loaded);
 void  load_so_path(char* path);
 void  doWork(void);
-void  cleanup_os_resources(int shm_fd);
+void  cleanup_mod_resources(int shm_fd);
 
 
 #endif //_HAVE_ZAF_H
