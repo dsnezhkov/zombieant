@@ -11,7 +11,6 @@
 
 
 #define MAX_BUF 1024                       // command buffer
-#define DAEMON_CHDIR "/tmp"                // daemon directory to operate from 
 #define ZCURL_AGENT "libcurl-agent/1.0"    // UA-Agent
 
 #define SHM_NAME " "                       // memfd:<...>
