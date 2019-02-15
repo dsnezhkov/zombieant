@@ -4,8 +4,9 @@
 #include "log.h"
 #include "zstructs.h"
 #include "zsignals.h"
-#include "zutil.h"
+#include "zmodules.h"
 #include "zservice.h"
+#include "zutil.h"
 
 // ps renaming
 #include "spt_status.h"
@@ -14,11 +15,11 @@
 #define _HAVE_ZAF_H
 
 
-#define MAX_BUF 1024                       // command buffer
 #define ZCURL_AGENT "libcurl-agent/1.0"    // UA-Agent
+#define ZLOG_LEVEL 1    
+#define ZPS_NAME "zaf"
 
 #define SHM_NAME " "                       // memfd:<...>
-#define SHM_NAME_MAX 254                   
 #define __NR_memfd_create 319              // https://code.woboq.org/qt5/include/asm/unistd_64.h.html
 
 // Global daemon log
@@ -39,22 +40,6 @@ char *ccurl="http://127.0.0.1:8080/";
  *  Data structures 
  ***/
 
-// ShMemTbl List
-typedef struct node {
-    char mname[SHM_NAME_MAX];
-    char mpath[1024];
-    char mstate[2];
-    int  fd;
-    struct node * next;
-} node_t;
-
-typedef struct modtbl {
-    char mname[SHM_NAME_MAX];
-    char mpath[1024];
-    char mstate[2];
-    int  fd;
-} modtbl_t;
-node_t * head = NULL;
 
 // Kernel Verison: memfd_create support
 /*typedef struct {
@@ -80,21 +65,23 @@ typedef struct {
 /*** 
  *  Functions
  ***/
-int   push(node_t * head, int shm_fd, char* path, char * mname, char * mstate);
-int   push_first(node_t * head, int shm_fd, char* path, char * mname, char * mstate);
-int   check_empty(node_t * head);
-int   list_sz(node_t * head);
-void  write_modlist(node_t * head, int sock);
-int   load_mod(node_t * head, char * url);
-int   unload_mod(node_t * head, char * name);
-int   mark_delete_mod(node_t * head, int shm_fd);
 int   processCommandReq (int sock, node_t * head);
 int   setupCmdP(void);
-char* mod_name2path(node_t * head, char * name);
-int   mod_name2fd(node_t * head, char * name, int loaded);
 void  load_so_path(char* path);
 void  doWork(void);
-void  cleanup_mod_resources(int shm_fd);
+
+
+extern int   check_empty(node_t * head);
+extern void  cleanup_mod_resources(int shm_fd);
+extern int   push(node_t * head, int shm_fd, char* path, char * mname, char * mstate);
+extern int   push_first(node_t * head, int shm_fd, char* path, char * mname, char * mstate);
+extern int   list_sz(node_t * head);
+extern void  write_modlist(node_t * head, int sock);
+extern int   load_mod(node_t * head, char * url);
+extern int   unload_mod(node_t * head, char * name);
+extern int   mark_delete_mod(node_t * head, int shm_fd);
+extern int   mod_name2fd(node_t * head, char * name, int loaded);
+extern char* mod_name2path(node_t * head, char * name);
 
 
 
