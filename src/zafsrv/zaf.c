@@ -1,15 +1,20 @@
 /* 
+ *                 === ZAF ===
+ *
+ *   Background daemon used to assist in loading remote modules in memory
+ *   via several available METHODS and presenting them to out of process operators 
+ *   for consumption 
+ *
+ *   METHODS: 
+ *     1.POSIX shm_open
+ *     2.memfd_create(2) 
  *
  *
- *   ZAF:
- *
- *
- *
- *
- *
+ *   CAPABILITIES:
  *
  *
  * Ref: some code from https://x-c3ll.github.io/posts/fileless-memfd_create */
+
 
 #define _GNU_SOURCE
 
@@ -43,8 +48,7 @@ inline int memfd_create(const char *name, unsigned int flags) {
 }
 
 // Detect if kernel is < or => than 3.17
-// Ugly as hell, probably I was drunk when I coded it
-// : Op_nomad: modded fallback, syscall checks
+// Op_nomad: modded fallback, syscall checks
 //
 // return 0 - POSIX shm only , 1 - memfd_create supported
 // 
@@ -87,20 +91,20 @@ int checKernel() {
 	}
 	else if ( memfd_kv_s.major > 3){
         if (memfdcheck == 1) {
-            memfd_kv_s.memfd_supp = 1;// TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
-            return 1; // TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
+            memfd_kv_s.memfd_supp = 1; // TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
+            return 1;                  // TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
         }
         memfd_kv_s.memfd_supp = 0;
 	}
 
 	if ( memfd_kv_s.minor < 17) {
-        memfd_kv_s.memfd_supp = 0;
+        memfd_kv_s.memfd_supp = 0; // shm only
         return 0;
 	}
 	else {
-        if (memfdcheck == 1) {
+        if (memfdcheck == 1) {    
             memfd_kv_s.memfd_supp = 1;  // TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
-            return 1; // TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
+            return 1;                   // TODO: WARNING!!!! only set to 0 for shm testing. change it back to 1 for proper.
         }
         memfd_kv_s.memfd_supp = 0;
         return 0;
@@ -138,7 +142,7 @@ int open_ramfs(Shared_Mem_Fd * smf) {
         smf->shm_type=1; //shm
 	}
 	else {
-		shm_fd = memfd_create(s, 1); // flags?
+		shm_fd = memfd_create(s, MFD_ALLOW_SEALING); // flags?
 		if (shm_fd < 0) { 
 			log_fatal("RamWorker: memfd_create: Could not open file descriptor\n");
 			return 0;
@@ -241,14 +245,21 @@ int setMemfdTbl(int shm_fd, char* mname) {
     char path[1024];
     char mstate[] = "L"; //Loaded
     
+    // TODO: Allow commands to seal the modules that would never be modified
+    //unsigned int seals =  F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_WRITE | F_SEAL_SEAL;
+    unsigned int seals =  F_SEAL_SEAL;
 
     log_debug("MemTbl: Populating Index Table");
-    if (memfd_kv_s.memfd_supp == 1) { //Funky way
+    if (memfd_kv_s.memfd_supp == 1) { 
+
 	    log_debug("MemTbl: memfd_create() is supported.");
+	    log_debug("MemTbl: Sealing modules.");
+        if (fcntl(shm_fd, F_ADD_SEALS, seals) == -1)
+	        log_error("MemTbl: fcntl(): Sealing modules failed");
+
         snprintf(path, 1024, "/proc/%d/fd/%d", getpid(), shm_fd);
     } else { 
         snprintf(path, 1024, "/proc/%d/fd/%d", getpid(), shm_fd); 
-        //snprintf(path, 1024, "/dev/shm/%s", mname); 
 	    log_debug("MemTbl: only /dev/shm supported.");
     }
 
@@ -267,11 +278,10 @@ int setMemfdTbl(int shm_fd, char* mname) {
 }
 
 
-
 int main (int argc, char **argv) {
 
     argv = save_ps_display_args(argc, argv);
-    init_ps_display("zaf");
+    init_ps_display("zaf"); // TODO: parmeterize
 
     fp = fopen (logFile,"w");
     if (fp == NULL) {
@@ -279,11 +289,11 @@ int main (int argc, char **argv) {
     }else{
         log_set_fp(fp); 
         //log_set_level(2); //  "TRACE", "DEBUG", >"INFO"<, "WARN", "ERROR", "FATAL"
-        log_set_level(1); 
-        log_set_quiet(logquiet);
+        log_set_level(1);  // TODO: paramterize
+        log_set_quiet(logquiet); // TODO: parameterize
     }
 
-	log_info("=== ZAF ===\n");
+	log_info("=== ZAF ===\n"); // parameterize
     //backgroundDaemonLeader();
     doWork();
 
