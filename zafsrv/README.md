@@ -34,11 +34,13 @@ CentOS - libc 2.17
 Kali   - libc 2.27
 ```
 
-### _libOpenSSL: Static
+### _libOpenSSL_: Static
 
 [Building OpenSSL](https://wiki.openssl.org/index.php/Compilation_and_Installation)
 
-1. Fetch current (_3.0.0-dev_) OpenSSL repo: `git clone git://git.openssl.org/openssl.git`
+1. Fetch current (_3.0.0-dev_) OpenSSL repo: 
+
+`git clone git://git.openssl.org/openssl.git`
 
 _Note_:CentOS has static glibc, and so it may depend on:
 
@@ -46,7 +48,9 @@ _Note_:CentOS has static glibc, and so it may depend on:
 
 2. Configure:
 
-`./config no-shared no-threads no-dso no-engine no-err no-psk no-srp no-ec2m no-weak-ssl-ciphers no-idea no-comp no-ssl2 no-ssl3 -DOPENSSL_USE_IPV6=0 -static -static-libgcc --prefix=/root/Code/dist/openssl`
+```
+./config no-shared no-threads no-dso no-engine no-err no-psk no-srp no-ec2m no-weak-ssl-ciphers no-idea no-comp no-ssl2 no-ssl3 -DOPENSSL_USE_IPV6=0 -static -static-libgcc --prefix=/root/Code/dist/openssl
+```
 
 3. Make: 
 
@@ -55,7 +59,7 @@ make
 make install_sw
 ```
 
-###  _libcURL`: Static
+###  _libcURL_: Static
 
 1. Fetch current (_7.64.0_) cURL repo: `git clone https://github.com/curl/curl`
 
@@ -68,7 +72,10 @@ _Note_: CentOS depends:
 3. Configure:
 
 
-`CPPFLAGS="-I/root/Code/zombieant/ext/openssl/include" LDFLAGS="-L/root/Code/zombieant/ext/openssl/lib -static" ./configure --with-ssl -without-zlib --disable-debug --enable-optimize --disable-curldebug  --disable-ares  --disable-shared --disable-thread --disable-rt --disable-largefile --disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smtp --disable-gopher --disable-manual --disable-libcurl-option --disable-ipv6 --disable-threaded-resolver --disable-pthreads --disable-verbose --disable-tls-srp --enable-unix-sockets --disable-cookies --without-winssl --without-schannel --without-darwinssl --without-polarssl --without-mbedtls --without-cyassl --without-wolfssl --without-mesalink --without-nss --without-libpsl --without-libmetalink --without-librtmp --without-winidn --without-libidn2 --enable-static --prefix=/root/Code/zombieant/ext/curl`
+```
+CPPFLAGS="-I/root/Code/zombieant/ext/openssl/include" LDFLAGS="-L/root/Code/zombieant/ext/openssl/lib -static" ./configure --with-ssl -without-zlib --disable-debug --enable-optimize --disable-curldebug  --disable-ares  --disable-shared --disable-thread --disable-rt --disable-largefile --disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smtp --disable-gopher --disable-manual --disable-libcurl-option --disable-ipv6 --disable-threaded-resolver --disable-pthreads --disable-verbose --disable-tls-srp --enable-unix-sockets --disable-cookies --without-winssl --without-schannel --without-darwinssl --without-polarssl --without-mbedtls --without-cyassl --without-wolfssl --without-mesalink --without-nss --without-libpsl --without-libmetalink --without-librtmp --without-winidn --without-libidn2 --enable-static --prefix=/root/Code/zombieant/ext/curl
+```
+
 
 4. Make:
 
@@ -84,8 +91,11 @@ ref: [cJSON] (https://github.com/DaveGamble/cJSON)
 
 2. Build 
 
-`make all`
-`make install DESTDIR="/root/Code/dist/cJSON"`
+```
+make all
+make install DESTDIR="/root/Code/dist/cJSON"
+```
+
 
 3. Copy `libcjson.a` to ZAF `/lib`:
 
@@ -98,6 +108,8 @@ One-file or small supporting utilities:
 [C99 log.c] (https://github.com/rxi/log.c)
 
 ### ZAF
+
+1. Run:
 
 `make`
 
