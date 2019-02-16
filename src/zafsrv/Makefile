@@ -15,7 +15,7 @@ zaf: log.o spt.o zaf.o
 	gcc $(CFLAGS) \
 		$(ZBUILD)/zaf.o $(ZBUILD)/log.o $(ZBUILD)/spt.o $(ZBUILD)/zsignals.o \
 		$(ZBUILD)/zservice.o $(ZBUILD)/zutil.o $(ZBUILD)/zmodules.o $(ZBUILD)/zcommander.o \
-		$(ZBUILD)/zmemory.o \
+		$(ZBUILD)/zmemory.o $(ZBUILD)/zdownloader.o \
 		-o $(ZBIN)/zaf \
 		$(ZLIB)/libcurl.a \
 	   	$(ZLIB)/libssl.a \
