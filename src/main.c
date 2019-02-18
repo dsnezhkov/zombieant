@@ -4,9 +4,10 @@
 
 int main(int argc, char **argv) {
 
-    /*while (1) { 
-		sleep(1) ; 
- 	}*/
-    pause();
+    printf("In main\n");
+    while (1) { 
+		sleep(5) ; 
+        printf("Sleep\n");
+ 	}
     return 0;
 }
