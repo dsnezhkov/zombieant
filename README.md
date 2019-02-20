@@ -731,7 +731,7 @@ Highlights:
 - Progressive LD_PRELOAD command line evaders.
 - Malware evaders with Self-preservation instincts.
 
-### 0x1. Inline Evasions, via `busybox` and `ld.so` loader
+### 0x0. Inline Evasions, via `busybox` and `ld.so` loader
 
 We could take the concepts and just use them with binaries that run binaries for us. Some great decoys already exist on many Linux systems. For example, `ld.so` is a loader that can run executables directly as parameters. Very handy. `ld.so` is always approved, right. So is `busybox` meta binary. We can even combine the two together to escape process pattern matching defensive engines. Consider the following:
 
@@ -797,7 +797,7 @@ vi -ensX $(/lib64/ld-linux-x86-64.so.2 /bin/busybox mktemp)  -c ':1,$d' -c ':sil
 $LD_PRELOAD=./lib/libweakref.so:./lib/libweakref2.so /lib64/ld-linux-x86-64.so.2  vi -ensX $(/bin/busybox mktemp)  -c ':1,$d' -c ':silent !/bin/ls'  -c ':wq'
 ```
 
-#### 0x2: Hiding Behind Reflective Mirrors
+#### 0x1: Hiding Behind Reflective Mirrors
 
 So by now we've hopefully evaded EDR watchful eyes by jumping around the various decoys and preloads. Another evasion vector that really comes out of necessity for rapid prototyping and development of modular malware rather than EDR evasion as a primary goal - is interfacing with higher level code.
 
@@ -808,7 +808,7 @@ Discussion and highlights :
 - SWIG capabilities. 
 - Embedded Interpreters (e.g. Lua, Tcl)
 
-##### 0x2:A: Golang via cgo
+##### 0x1:A: Golang via cgo
 
 Discussion of Code / demo
 
@@ -838,7 +838,9 @@ func main() {}
 ```
 
 
-##### 0x2:B: Embedding Interpeters
+#### 0x2: Dynamic Code
+
+##### 0x2:A: Embedding Interpeters
 
 We want interpreters and dynamic code for speed of development, yes, but also for a great deal of reflection. EDRs might just get blind tracing such a call chain to a verified IoC. 
 
@@ -916,7 +918,7 @@ $LD_LIBRARY_PATH=. LD_PRELOAD=./liblua.so ./invoke_lua hello.lua
 TODO: <output>
 ```
 
-##### 0x3:B: Bringing Lua libraries
+##### 0x2:B: Bringing Lua libraries
 
 And then the world is your oyster, if you can escape out to scripting and start loading other libraries at runtime:
 
@@ -963,7 +965,7 @@ Highlights:
 - Memory-resident Malware Modules.
 - Modular Malware Payload Warehouses: Remote module loads
 
-### Inline Parameterized Command Evasion. Uber-preloaders
+### 0x0: Inline Parameterized Command Evasion. Uber-preloaders
 
 The first impulse is to directly use `LD_PRELOAD` for a lot of things static, as we have seen before
 
@@ -1054,7 +1056,7 @@ hello
 bin  ext  INSTALL.md  lib  log	Log.md	Log_tmp.html  Makefile	README.md  run.sh  src	zafsrv
 ```
 
-### Memory-resident malware modules.
+### 0x1: Memory-resident malware modules.
 
 Useful links:
 
@@ -1125,7 +1127,7 @@ EDRs might have a little trouble chasing after this. But wait, what is process i
 > For now just know that `56417` is the PID of *any* process your id can control. This is big as we will see later. Remember we said . linux parent child relationship is transitive and you could get access to parent and child resources interchangeably? WE shall dive deeper in the next section.
 
 
-### Modular Malware Payload Warehouses: Remote module loads
+### 0x2: Modular Malware Payload Warehouses: Remote module loads
 
 Ok, so we now have an uber loader that can load all kinds of modules, and we know how to chain memory-resident modules. We may prefer to build an even more modular malware delovery system, with even greater evasion capability. What if we have an out of target process store of modules/payloads. The payloads will be _somewhere_ in memory , and we would consistently refer to them as we operate? That store could have a protocol to load the remote or local malware modules in its memory and we would just need to reference them by file descriptors in our preloaders.
 
@@ -1227,7 +1229,7 @@ def getMemFd(seed):
     return modMemFd, modMemPath
 ```
 
-#### Loading Malware Module with PyPreload
+#### 0x0:A Loading Malware Module with PyPreload
 
 Example:
 
@@ -1270,7 +1272,7 @@ Process tree: Where is Waldo? We only see .. `bash` invoking `ls`  ;)
 56418 pts/6    S+     0:00                  |   |   |       \_ /bin/ls
 ```
 
-#### Loading and Executing Malware Warehousing ZAFSrv with PyPreload
+#### 0x0:B Loading and Executing Malware Warehousing ZAFSrv with PyPreload
 
 In the same vein we can load our ZAFSrv into memory with the pypreload cradle:
 
@@ -1310,6 +1312,8 @@ A few words of caution:
 After the dust settles, and your EDRs are hopefully lost in the forest of process trees and zombie process ant targets compelled to run your code (lol), you have to remember that the next time you face them they will be ready. Take steps to protect your payloads. Either via additional evasion capabilities, encryption, or other novel ways to be curious, inquisitive and overserving. 
 
 Some ideas and tips below, I also hope defensive hackers take note ;)
+
+Also, as always any of the below defenive techniques is an offensive ammo - yin/yang, right....
 
 #### Spring Cleaning, Rootkit style
 
@@ -1372,7 +1376,7 @@ argv[0] = bin/main_init
 
 #### No Main(), no gain ..?
 
-1.Main(), redefined
+Main(), redefined
 
 `nomain.c`:
 
@@ -1403,7 +1407,8 @@ int _() {
 }
 ```
 
-2.Hiding in plain symbol sight
+#### Hiding in plain symbol sight
+Hijack of the dataframe
 
 `nomain_entry.c`:
 
@@ -1421,7 +1426,7 @@ int _() {
 }
 ```
 
-3.Alternative ELF loaders.
+#### Alternative ELF loaders
 
 If you are allowed to bring in other elf loaders, you could point an executable to something that may not be (yet) instrumented:
 
