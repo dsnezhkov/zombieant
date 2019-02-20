@@ -1,44 +1,5 @@
 # Zombie Ant Farm: Practical Tips for Playing Hide and Seek with Linux EDRs.
 
-## Abstract:
-
----
-```txt
-Endpoint Detection and Response solutions have landed in Linux. With the ever-increasing footprint of Linux machines deployed in data centers, threat actors have been forced to move cross platform in the presence of new defensive capabilities. As hackers, we heart Linux, and so the challenge is interesting.
-
-In the first part of the talk we will share practical tips and techniques offensive operators can use to slide under the EDR radar, and expand post-exploitation capabilities on a farm of hardened Linux machines. As they say, when EDRs give you lemons ... you turn them into oranges, and let EDRs make lemonade ;)
-
-Specifically, we will see how approved executables could be used as decoys to execute foreign functionality avoiding common anti-debugging signatures the defense is looking for. We will walk through the process of using well known capabilities of a dynamic loader, with many examples and demos at the code level. We will take lessons from user-land root-kits in evasion choices, and attempt to lead defense on a wild goose chase after the artifacts of a compromise.
-
-Part two will focus on weaponizing what we have learned. We will show how to create custom preloaders, and use mimicry to hide modular malware in memory for deeper evasion. In fact,
-we will go one step further to create a "Preloader-as-a-Service" capability (cause everything else now is;) by abstracting storage of modular malware from its executing cradles. Don't worry, the service is free to you!
-
-We fully believe the ability to retool in the field matters, so we have distilled the techniques into reusable code patterns and a toolkit you will be able to use or base your own code on after the Zombie Ant Farm is released at the con. You may ask what's in the name, and we will talk about that ask well.
-
-This talk is for hackers, offensive operators, malware analysts and system defenders. We sincerely hope defensive hackers can attend and also have fun.
-
-Compelling known good executables to misbehave, leaving EDRs watching on the sidelines is so much fun (and profit)!
-```
-
-Short abstract:
-
-```txt
-EDR solutions have landed in Linux. With the ever-increasing footprint of Linux machines deployed in data centers, offensive operators have to answer the call. 
-
-In the first part of the talk we will share practical tips and techniques hackers can use to slide under the EDR radar, and expand post-exploitation capabilities.
-
-We will see how approved executables could be used as decoys to execute foreign functionality. We will walk through the process of using well known capabilities of the dynamic loader. We will take lessons from user-land root-kits in evasion choices.
-
-Part two will focus on weaponizing the capabilities. We will show how to create custom preloaders, and use mimicry to hide modular malware in memory. We will create a "Preloader-as-a-Service" capability of sorts by abstracting storage of modular malware from its executing cradles. This PaaS is free to you though!
-
-We fully believe the ability to retool in the field matters, so we have packaged the techniques into reusable code patterns in a toolkit you will be able to use (or base your own code on) after it is released. 
-
-This talk is for hackers, offensive operators, malware analysts and system defenders. We sincerely hope defensive hackers can attend and also have fun.
-
-```
-
------
-
 ## Inspiration
 To me, hacking assumes curiosity, observation, and reflection. What could be a better observation platform than the nature itself. As humans, we draw inspiration, joy and courage from it, we model our lives and sometimes our technology by observing its patterns. It really is the greatest teacher of all. We stand in awe at the complexity of problems manifested in symbiotic relationships between living things, and the elegance of the solutions provided by the world outside. Some of the inspiration for this work was drawn from the naturally occurring phenomena.
 
@@ -76,12 +37,6 @@ On a recent engagement our team was faced with hiding malware from a commercial 
 - Hide payloads in memory, and serve them cross-processes to fool EDR heuristics and to achieve persistence in userland.
 - Use system resident or otherwise approved binaries as dynamic decoys for modular malware operation, breaking FIMs and shallow signature checking mechanisms present on the system.
 
-## Target Audience
- - Hackers at large
- - Red Team offensive operators and pentesters
- - Malware Analysts
- - System Defenders 
-
 ---
 ## Roadmap
 
@@ -105,9 +60,6 @@ We will explore the following practical concepts:
 ## Observations
 
 ### Runtime Hooking / Runtime Preloading
-
-- _Brief review of what runtime hooking is_
-- _Brief review of what runtime preloading is_
 
 *Hooking Tradeoffs*
 
