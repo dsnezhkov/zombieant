@@ -1,5 +1,33 @@
 # Zombie Ant Farm: Practical Tips for Playing Hide and Seek with Linux EDRs.
 
+
+## Inspiration
+To me, hacking assumes curiosity, observation, and reflection. What could be a better observation platform than the nature itself. As humans, we draw inspiration, joy and courage from it, we model our lives and sometimes our technology by observing its patterns. It really is the greatest teacher of all. We stand in awe at the complexity of problems manifested in symbiotic relationships between living things, and the elegance of the solutions provided by the world outside. Some of the inspiration for this work was drawn from the naturally occurring phenomena.
+
+[Zombie Ladybugs](https://www.sciencemag.org/news/2015/02/wasp-virus-turns-ladybugs-zombie-babysitters)
+
+[Zombie Ants](https://www.sciencemag.org/news/2010/08/scienceshot-zombies-thrived-ancient-earth)
+
+[Zombie Caterpillars](https://www.sciencemag.org/news/2014/12/how-virus-turns-caterpillar-zombie)
+
+[Zombie Rats](https://www.sciencemag.org/news/2000/07/parasites-make-scaredy-rats-foolhardy)
+
+
+> One of Earth’s weirdest natural phenomena: zombie ants.
+
+> These are carpenter ants in tropical locations, infiltrated and controlled by _Ophiocordyceps unilateralis sensu lato_, sometimes called `zombie ant fungus`. This fungal body-snatcher forces ants to a forest understory and compels them to climb vegetation and bite into the underside of leaves or twigs, where the ants die. The invasion culminates with the sprouting of a spore-laden fruiting body from a dead ant’s head. The fungus thereby benefits because infectious spores are released onto the ground below, where they can infect other foraging ants. 
+
+> The new research shows that _the fungal parasite accomplishes all this without infecting the ants’ brains_.
+
+> We found that a high percentage of the cells in a host were fungal cells. In essence, _these manipulated animals were a fungus in ants’ clothing_.
+
+> Normally in animals, behavior is controlled by the brain sending signals to the muscles, but our results suggest that _the parasite is controlling host behavior peripherally_. 
+_Almost like a puppeteer pulls the strings to make a marionette move, the fungus controls the ant’s muscles to manipulate the host’s legs and mandibles._
+
+> We hypothesize that the fungus may be preserving the brain so the host can survive until it performs its final biting behavior — that critical moment for fungal reproduction. But we need to conduct additional research to determine the brain’s role and how much control the fungus exercises over it.
+
+_David Hughes, associate professor of entomology and biology at Penn State_
+
 ## Objectives
 - Build modular Linux malware, that can evade detection via it's use of linker preloading techniques.
 - Hide payloads in memory, and serve them cross-processes to fool EDR heuristics and to achieve persistence in userland.
