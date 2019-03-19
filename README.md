@@ -1,5 +1,6 @@
 # Zombie Ant Farm: A Kit For Playing Hide and Seek with Linux EDRs.
 
+Version 0.5-alpha
 
 ### Why?
 Because monolithic offensive tools are never enough and building your own offensive strategies and tools is fun. 
