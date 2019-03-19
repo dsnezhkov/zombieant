@@ -4,7 +4,7 @@
 #include "weakref_so.h"
 
 void mstat(){
-    printf("mstat()\n");
+    printf("Weakref Lib2: mstat()\n");
     fflush(stdout);
 }
 

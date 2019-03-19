@@ -13,8 +13,8 @@
 #include "zmemfd.h"
 
 
-extern int  url2fd(char *downloadUrl, Shared_Mem_Fd * smf);
-extern int  setMemfdTbl(int shm_fd, char* mname);
+extern int url2fd(char *downloadUrl, Shared_Mem_Fd * smf);
+extern int setMemfdTbl(int shm_fd, char* mname);
 extern int open_ramfs(Shared_Mem_Fd * smf);
 
 

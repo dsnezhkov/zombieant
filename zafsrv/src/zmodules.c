@@ -135,7 +135,6 @@ int find_mod(node_t * head, char * name) {
 // TODO: is load the same as activate? Should we have it as separate action?
 int load_mod(node_t * head, char * url) {
 
-
     CURLU       *h;
     CURLUcode   uc;
     char        *path=NULL, *fileName=NULL;
@@ -190,7 +189,7 @@ int load_mod(node_t * head, char * url) {
     uresp = url2fd(url, &shm_fd_s);
     if (uresp != 0){
         log_debug("LoadMod: fetched OK, setting Mem table");
-        setMemfdTbl(shm_fd_s.shm_fd, fileName );
+        setMemfdTbl(shm_fd_s.shm_fd, fileName);
     }else{
         log_debug("LoadMod: url2fd failed, reclaiming resources");
         cleanup_mod_resources(shm_fd_s.shm_fd);

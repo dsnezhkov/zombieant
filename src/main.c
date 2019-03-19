@@ -1,13 +1,17 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
+
 
 int main(int argc, char **argv) {
 
-    printf("In main\n");
-    while (1) { 
-		sleep(5) ; 
-        printf("Sleep\n");
+    int i;
+
+    printf("%s: ", __FUNCTION__);
+    for (i=1; i < 4; i++) { 
+        printf(" %d ", i);
+        fflush(stdout);
+		usleep(500000) ; 
  	}
+    printf("\n");
     return 0;
 }
