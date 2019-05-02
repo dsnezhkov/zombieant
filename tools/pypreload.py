@@ -184,7 +184,7 @@ def setDname(dname, dpath):
        import setproctitle
        setproctitle.setproctitle(dname)
     except ImportError as e:
-       printf("Setproctitile not loaded", e)
+       print("Setproctitile not loaded", e)
 
 
 def main():

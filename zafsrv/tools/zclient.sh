@@ -2,6 +2,11 @@
 
 listmod(){
 
+    echo '{"command": "listmod"}' | nc localhost $PORT
+}
+
+listmod_cat(){
+
     exec 3<>/dev/tcp/127.0.0.1/$PORT
 
 cat<<! 1>&3
@@ -12,6 +17,9 @@ cat<<! 1>&3
 }
 
 loadmod(){
+    echo  "{ \"command\": \"loadmod\", \"args\": [ { \"modurl\": \"$1\" } ] }"  | nc localhost $PORT
+}
+loadmod_cat(){
     exec 3<>/dev/tcp/127.0.0.1/$PORT
 
 cat<<! 1>&3
@@ -25,7 +33,12 @@ cat<<! 1>&3
 
     timeout 1s /bin/cat <&3
 }
-unloadmod(){
+
+unloadmod_cat(){
+    echo "{ \"command\": \"unloadmod\", \"args\": [ { \"modname\": \"$1\" } ] }" | nc localhost $PORT
+}
+
+unloadmod_cat(){
     exec 3<>/dev/tcp/127.0.0.1/$PORT
 
 cat<<! 1>&3
@@ -52,7 +65,7 @@ then
     exit 1
 fi
 
-PORT=$(lsof -i | grep zaf | grep '(LISTEN)' | awk -F: '{print $2}' | sed 's/ (LISTEN)//')
+PORT=$(lsof -p  $(pgrep zaf) | grep '(LISTEN)' | awk -F: '{print $2}' | sed 's/ (LISTEN)//')
 if [[ ! -z $PORT ]]
 then
     #listmod

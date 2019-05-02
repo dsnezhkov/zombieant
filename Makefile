@@ -10,7 +10,7 @@ EXT = $(CURDIR)/ext
 LUAJITFLAGS = -I/root/Code/zombieant/ext/luadist/include/luajit-2.0 -L/root/Code/zombieant/ext/luadist/lib -lluajit-5.1
 
 
-all: libctx nomain nomain_interp nomain_entry main main_extern main_ctor main_init main_weakref libweakref libmctor libinterrupt
+all: libctx nomain nomain_interp nomain_entry main main_extern main_ctor main_init main_weakref_control main_weakref_chained libweakref libmctor libinterrupt
 all_plus_shims: all goshim
 
 ### Libs
@@ -38,7 +38,7 @@ libinterrupt:
 
 libweakref: 
 	$(CC) $(CFLAGS) -fPIC -shared $(SRC)/weakref.c -Wl,-soname,libweakref.so -o $(LIB)/libweakref.so
-	$(CC) $(CFLAGS) -fPIC -shared $(SRC)/weakref2.c -Wl,-soname,libweakref2.so -o $(LIB)/libweakref2.so
+	$(CC) $(CFLAGS) -fPIC -shared $(SRC)/weakref_chained2.c -Wl,-soname,libweakref2.so -o $(LIB)/libweakref2.so
 
 libaslr: 
 	$(CC) $(CFLAGS) -fPIC -shared $(SRC)/aslr.c -Wl,-soname,libaslr.so -o $(LIB)/libaslr.so

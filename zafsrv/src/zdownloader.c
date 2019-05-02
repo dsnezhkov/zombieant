@@ -43,6 +43,8 @@ int url2fd(char *downloadUrl, Shared_Mem_Fd * smf) {
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
         curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, smf->shm_file); 
+		curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L); 
+
 		
 		res = curl_easy_perform(curl);
 		if (res != CURLE_OK && res != CURLE_WRITE_ERROR) {
