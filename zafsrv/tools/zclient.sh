@@ -34,7 +34,7 @@ cat<<! 1>&3
     timeout 1s /bin/cat <&3
 }
 
-unloadmod_cat(){
+unloadmod(){
     echo "{ \"command\": \"unloadmod\", \"args\": [ { \"modname\": \"$1\" } ] }" | nc localhost $PORT
 }
 
@@ -65,7 +65,7 @@ then
     exit 1
 fi
 
-PORT=$(lsof -p  $(pgrep zaf) | grep '(LISTEN)' | awk -F: '{print $2}' | sed 's/ (LISTEN)//')
+PORT=$(lsof -p  $(ps -ef | grep zaf$  | egrep -v '(tmux|egrep)' | awk '{print $2}' ) | grep '(LISTEN)' | awk -F: '{print $2}' | sed 's/ (LISTEN)//')
 if [[ ! -z $PORT ]]
 then
     #listmod

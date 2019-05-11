@@ -8,7 +8,7 @@
 
 	when called :
 		$ ./nomain 
-	ctor invokes, "main" invkes
+	ctor invokes, "main" invokes
 	
 */
 __attribute__((constructor)) static void myctor(int argc, char **argv, char* envp[]){

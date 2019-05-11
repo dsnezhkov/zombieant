@@ -44,7 +44,6 @@ libaslr:
 	$(CC) $(CFLAGS) -fPIC -shared $(SRC)/aslr.c -Wl,-soname,libaslr.so -o $(LIB)/libaslr.so
 
 ### Mains
-
 main:
 	$(CC) $(CFLAGS) -static-libgcc -static-libstdc++ $(SRC)/main.c -o $(BIN)/main -include /root/Code/zombieant/ext/glibc_version_header/version_headers/force_link_glibc_2.17.h
 
@@ -87,6 +86,7 @@ client:
 	$(CC) $(CFLAGS) $(SRC)/client_dyn.c -o $(BIN)/client_dyn -ldl
 
 goshim:
+	$(CC) $(CFLAGS) $(SRC)/dyload.c -o $(BIN)/dyload -ldl
 	$(GO) build -o $(LIB)/shim.so -buildmode=c-shared $(SRC)/shim.go
 
 #### Lua
