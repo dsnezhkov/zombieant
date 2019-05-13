@@ -99,7 +99,11 @@ luajitstatic:
 luajitstatic_luastatic:
 	$(CC) -Os $(SRC)/test.lua.c -o $(BIN)/test_lua_static $(EXT)/luadist-static/lib/libluajit-5.1.a -rdynamic -lm -ldl -I$(EXT)/luadist-static/include/luajit-2.0/ -static-libgcc -fPIC
 
+#### ASLR weaken PoC
 
+aslr_weaken:
+	$(CC) -z execstack -o $(BIN)/aslr_cradle_template src/aslr_cradle_template.c
+	$(CC) -o $(BIN)/aslr_weakener src/aslr_weakener.c
 
 
 ########### Clean
@@ -120,5 +124,8 @@ clean_libweakref:
 
 clean_shims:
 	$(RM) $(LIB)/shim.so
+
+clean_aslr_weaken:
+	$(RM) $(BIN)/aslr_weakener $(BIN)/aslr_cradle_template
 
 clean: clean_psevade clean_main clean_libmctor clean_libweakref clean_libinterrupt clean_shims
